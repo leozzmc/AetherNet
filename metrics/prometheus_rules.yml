@@ -1,0 +1,12 @@
+groups:
+  - name: aethernet_dtn_metrics
+    rules:
+      - record: job:bundles_delivered_rate1m
+        expr: rate(bundles_delivered_total[1m])
+      - alert: HighQueueDepth
+        expr: queue_depth_lunar > 100
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Lunar node queue depth is building up"

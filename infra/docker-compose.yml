@@ -1,0 +1,15 @@
+version: "3.8"
+
+services:
+  simulator:
+    build:
+      context: ..
+      dockerfile: infra/images/simulator.Dockerfile
+    container_name: aethernet-simulator
+    volumes:
+      - ../:/app
+    working_dir: /app
+    environment:
+      - PYTHONPATH=/app
+    # Keeps container alive or runs the demo script
+    command: ["sh", "scripts/run_demo.sh"]

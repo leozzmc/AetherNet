@@ -1,0 +1,21 @@
+{
+  "title": "AetherNet DTN Overview",
+  "uid": "aethernet-mvp",
+  "panels": [
+    {
+      "type": "timeseries",
+      "title": "Queue Depths",
+      "targets": [
+        { "expr": "queue_depth_lunar", "legendFormat": "Lunar Outbound" },
+        { "expr": "queue_depth_relay", "legendFormat": "Relay Outbound" }
+      ]
+    },
+    {
+      "type": "stat",
+      "title": "Delivered Bundles",
+      "targets": [
+        { "expr": "sum(bundles_delivered_total)", "legendFormat": "Total Delivered" }
+      ]
+    }
+  ]
+}

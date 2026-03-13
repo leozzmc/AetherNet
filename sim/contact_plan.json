@@ -1,0 +1,27 @@
+{
+  "simulation_duration_sec": 120,
+  "contacts": [
+    {
+      "source": "lunar-node",
+      "target": "leo-relay",
+      "start_time": 5,
+      "end_time": 25,
+      "one_way_delay_ms": 1500,
+      "bandwidth_kbit": 256,
+      "loss_percent": 0.0,
+      "bidirectional": false,
+      "description": "Lunar node to relay contact window"
+    },
+    {
+      "source": "leo-relay",
+      "target": "ground-station",
+      "start_time": 30,
+      "end_time": 60,
+      "one_way_delay_ms": 40,
+      "bandwidth_kbit": 2048,
+      "loss_percent": 0.0,
+      "bidirectional": false,
+      "description": "Relay to ground station contact window"
+    }
+  ]
+}

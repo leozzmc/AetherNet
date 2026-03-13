@@ -1,0 +1,77 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "AetherNet Contact Plan",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "simulation_duration_sec": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "contacts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "source": {
+            "type": "string",
+            "minLength": 1
+          },
+          "target": {
+            "type": "string",
+            "minLength": 1
+          },
+          "start_time": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "end_time": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "one_way_delay_ms": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "bandwidth_kbit": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "loss_percent": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 100
+          },
+          "bidirectional": {
+            "type": "boolean"
+          },
+          "description": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "source",
+          "target",
+          "start_time",
+          "end_time",
+          "one_way_delay_ms",
+          "bandwidth_kbit",
+          "bidirectional"
+        ],
+        "allOf": [
+          {
+            "properties": {
+              "end_time": {
+                "exclusiveMinimum": {
+                  "$data": "1/start_time"
+                }
+              }
+            }
+          }
+        ]
+      }
+    }
+  },
+  "required": ["simulation_duration_sec", "contacts"]
+}
