@@ -3,142 +3,115 @@
 **A Secure Delay-Tolerant Distributed Infrastructure Prototype for Space Networks**
 
 ## Project Purpose
-AetherNet explores how to build a secure, contact-aware, delay-tolerant message infrastructure for space-like environments with intermittent connectivity and long delays.
+AetherNet explores how to build a secure, contact-aware, delay-tolerant message infrastructure for space-like environments characterized by intermittent connectivity and extreme latency.
 
-### AetherNet vs LunarNet
-- **AetherNet**: The core platform and simulation architecture.
-- **LunarNet**: The reference deployment scenario using an `Earth ↔ LEO ↔ Moon` topology.
+## AetherNet vs LunarNet
+- **AetherNet**: the core platform, routing policies, and simulation architecture
+- **LunarNet**: the reference deployment scenario using an `Earth ↔ LEO ↔ Moon` topology
 
-## MVP Scope (through Wave 8)
-This repository provides a highly repeatable, application-layer DTN experimental platform with:
-- ✅ **Contact-Aware Forwarding**: Bundles move only during valid orbital windows.
-- ✅ **Store-Carry-Forward**: Filesystem-backed DTN store prevents data loss during link outages.
-- ✅ **Strict Priority Delivery**: Telemetry is forwarded ahead of Science data.
-- ✅ **Data Retention & Expiry**: Expired bundles are skipped during forwarding and periodically purged from the DTN store.
-- ✅ **Experimental Scenarios**: Built-in profiles (e.g., delayed delivery, expiry before contact).
-- ✅ **End-of-Run Reporting & Analytics**: Machine-readable JSON reports, multi-scenario comparisons, and derived metrics (e.g., delivery ratios, outcome classifications).
+## Current MVP Capabilities
+This repository provides a repeatable, application-layer DTN experimental platform featuring:
+- contact-aware forwarding driven by contact windows
+- store-carry-forward behavior using a filesystem-backed DTN store
+- strict-priority delivery where telemetry is forwarded ahead of science data
+- multi-hop simulation across `lunar-node -> leo-relay -> ground-station`
+- retention and expiry handling for stale bundles
+- built-in experimental scenarios such as delayed delivery and expiry before contact
+- machine-readable JSON reports, scenario comparisons, and lightweight lifecycle timing summaries
 
-## Current Non-Goals
-Intentionally out of scope for the MVP:
-- Real network transport (HTTP, gRPC, TCP/UDP data plane)
-- Distributed task scheduling / Kubernetes (K3s)
-- Orbital mechanics or RF-layer simulation
-- Database-backed persistence
+## Quickstart
 
-## Running Experiments
+### 1. Environment setup
+AetherNet requires Python 3.10+.
 
-**Run a single scenario and export the report:**
 ```bash
-./scripts/run_demo.sh --scenario delayed_delivery --report-out artifacts/reports/delayed_delivery.json
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install --upgrade pip
+python -m pip install -r requirements-dev.txt
+````
+
+### 2. Local validation
+
+Run a quick local validation before pushing:
+
+```bash
+make smoke
 ```
 
-Run all built-in scenarios and generate an aggregate comparison:
+### 3. Run one scenario
 
+Using the Makefile shortcut:
+
+```bash
+make demo
 ```
+
+Directly via script:
+
+```bash
+./scripts/run_demo.sh
+```
+
+### 4. Run all built-in scenarios
+
+Using the Makefile shortcut:
+
+```bash
+make compare
+```
+
+Directly via script:
+
+```bash
 ./scripts/run_compare.sh
 ```
-Outputs will be securely written to the `artifacts/` directory. See `docs/artifacts.md` for details.
 
-##  Testing
+Generated outputs are written under `artifacts/`. See `docs/artifacts.md` for details.
 
-Run the test suite from the repository root:
+### 5. Run tests
 
 ```bash
-export PYTHONPATH=$(pwd)
+make test
+```
+
+or:
+
+```bash
 pytest tests/
 ```
 
+## Developer Ergonomics & CI
+
+The repo includes:
+
+* `requirements-dev.txt` for developer dependencies
+* a lightweight `Makefile` for common tasks
+* a minimal GitHub Actions workflow for automated test validation
+
+Useful commands:
+
+* `make setup-dev`
+* `make smoke`
+* `make demo`
+* `make compare`
+* `make test`
+
+## Current Limitations / Non-Goals
+
+The following remain intentionally out of scope for the current MVP:
+
+* real network transport (HTTP, gRPC, TCP/UDP data plane)
+* distributed task scheduling or Kubernetes/K3s orchestration
+* orbital mechanics or RF-layer physical simulation
+* database-backed persistence
+* production observability stack
+
+For more details, see:
+
+* `docs/development.md`
+* `docs/reports.md`
+* `docs/artifacts.md`
 
 
----
-
-System Topology
-
-```mermaid
-graph TD
-
-subgraph Earth_Segment
-    EC[Earth Cloud / Control Plane]
-    GS[Ground Station Gateway]
-end
-
-subgraph LEO_Constellation
-    LEO1[LEO Satellite A<br>Edge Compute]
-    LEO2[LEO Satellite B<br>Relay Storage]
-end
-
-subgraph Lunar_Segment
-    LR[Lunar Relay Orbiter]
-    MB[Moon Base Node]
-    MR[Moon Rover]
-end
-
-EC -->|Internet| GS
-GS -->|Uplink Downlink<br>30-80 ms| LEO1
-LEO1 -->|Inter Satellite Link<br>10-30 ms| LEO2
-LEO2 -->|Deep Space Link<br>1-2 s| LR
-LR -->|Orbital Relay| MB
-MB -->|Surface Network| MR
-```
-
-AetherNet Node Architecture
-
-```mermaid
-graph TD
-
-subgraph AetherNet_Node
-    direction TB
-
-    subgraph Security_Layer
-        SPIRE[SPIRE Agent<br>Node Identity]
-        MTLS[mTLS Secure Communication]
-    end
-
-    subgraph Compute_Storage_Layer
-        Scheduler[Distributed Task Scheduler]
-        DTNStore[DTN Object Storage<br>Store Carry Forward]
-    end
-
-    subgraph Infrastructure_Layer
-        K3S[K3s Container Runtime]
-        NetSim[Network Simulation<br>tc / toxiproxy]
-    end
-
-end
-
-Users[Users / Applications]
-Control[Earth Control Plane]
-
-Users --> Scheduler
-Scheduler --> DTNStore
-
-Control --> SPIRE
-SPIRE --> MTLS
-
-Scheduler --> MTLS
-DTNStore --> MTLS
-
-MTLS --> K3S
-K3S --> NetSim
-
-NodeA[Space Node A]
-NodeB[Space Node B]
-
-NodeA -->|Secure DTN Transfer| NodeB
-```
-
-Data Flow
-
-```mermaid
-sequenceDiagram
-    participant Rover
-    participant LunarNode
-    participant Relay
-    participant Ground
-
-    Rover->>LunarNode: Telemetry Data
-    LunarNode->>Relay: Store Bundle
-    Relay-->>Relay: Cache (Link unavailable)
-    Relay->>Ground: Forward when link opens
-    Ground->>Ground: Process Data
-```
+----

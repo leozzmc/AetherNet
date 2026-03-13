@@ -1,1 +1,38 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Virtual environments
+.env
 .venv/
+env/
+venv/
+ENV/
+
+# Test / coverage / local caches
+.pytest_cache/
+.coverage
+htmlcov/
+.mypy_cache/
+.ruff_cache/
+.cache/
+
+# Generated artifacts
+artifacts/
+payloads/telemetry/*
+payloads/science/*
+!payloads/telemetry/.gitkeep
+!payloads/science/.gitkeep
+
+# Editors / OS
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# Optional notebook hygiene
+.ipynb_checkpoints/

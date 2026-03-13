@@ -1,0 +1,4 @@
+# AetherNet Developer Dependencies
+# Kept strictly minimal for the MVP phase.
+
+pytest>=7.0.0
