@@ -120,21 +120,43 @@ make smoke
 ```
 
 ### 3. Run Experiments
-**Run a single scenario:**
+**Run a single scenario (Makefile shortcut):**
 ```bash
 make demo
 ```
+**Run a single scenario :**
 
-**Run all built-in scenarios (Comparison):**
+```bash
+./scripts/run_demo.sh
+```
+
+
+**Run all built-in scenarios (Makefile shortcut):**
 ```bash
 make compare
 ```
 *Generated outputs are written under `artifacts/`. See `docs/artifacts.md` for details.*
 
+**Run all built-in scenarios (Makefile shortcut):**
+
+```bash
+./scripts/run_compare.sh
+```
+
 ### 4. Run tests
+
+Using the Makefile:
+
 ```bash
 make test
 ```
+
+Directly with pytest:
+
+```bash
+pytest tests/
+```
+
 
 ## Developer Ergonomics & CI
 The project uses a lightweight `Makefile` as a convenience wrapper and tracks developer dependencies via `requirements-dev.txt`. A minimal GitHub Actions workflow is included to automatically validate pull requests. 
