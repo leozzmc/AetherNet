@@ -1,0 +1,13 @@
+{
+  "bundle_timelines": {
+    "tel-001": {
+      "stored_tick": 5,
+      "first_forwarded_tick": 5,
+      "delivered_tick": 15
+    }
+  },
+  "bundles_delivered_total": {
+    "telemetry": 2,
+    "science": 1
+  }
+}

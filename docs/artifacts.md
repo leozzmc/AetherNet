@@ -1,23 +1,102 @@
-# AetherNet Artifacts Contract
+# AetherNet Artifacts
 
-To ensure reproducibility and ease of integration with future dashboards or analysis tools, AetherNet adheres to a strict output convention for all simulation artifacts.
+Simulation outputs are written under:
 
-## Directory Layout
-When running the batch comparison tool (`./scripts/run_compare.sh`), outputs are written to the `artifacts/` directory at the repository root:
-
-```text
+```
 artifacts/
-├── comparison.json           # Aggregate summary of all executed scenarios
-└── reports/
-    ├── default_multihop.json # Full detailed report for a specific scenario
-    ├── delayed_delivery.json
-    └── expiry_before_contact.json
 ```
 
-## Report Schemas
+Directory layout:
 
-**Per-Scenario Report** ( `reports/*.json` )
-The output of a single simulation run. It contains the complete `final_metrics` snapshot, along with lists of `delivered_bundle_ids` and `purged_bundle_ids` for deep debugging.
+```
+artifacts/
+reports/
+default_multihop.json
+delayed_delivery.json
+expiry_before_contact.json
+comparison/
+    scenario_comparison.json
+```
 
-**Aggregate Comparison** (`comparison.json`)
-A high-level overview combining the results of all scenarios. It contains `per_scenario_summaries` (compact versions of the full reports) and an `aggregate` section detailing total bundles delivered, expired, and purged across the entire experiment suite.
+---
+
+## Report Structure
+
+Each scenario report contains:
+
+### bundle_timelines
+
+Lifecycle timestamps for each bundle.
+
+Example:
+
+```
+
+"tel-001": {
+"stored_tick": 5,
+"first_forwarded_tick": 5,
+"delivered_tick": 15
+}
+
+```
+
+---
+
+### forwarding metrics
+
+```
+
+bundles_forwarded_total
+bundles_delivered_total
+bundles_expired_total
+
+```
+
+These metrics describe the behavior of the forwarding layer.
+
+---
+
+### queue depths
+
+```
+
+queue_depth_lunar
+queue_depth_relay
+
+```
+
+Snapshots of queue states at the end of the simulation.
+
+---
+
+### purged bundles
+
+Expired bundles appear under:
+
+```
+
+purged_bundle_ids
+recent_purged_ids
+
+```
+
+Example:
+
+```
+
+"purged_bundle_ids": ["tel-short"]
+
+```
+
+---
+
+## Interpreting Results
+
+Typical patterns:
+
+| Scenario | Expected outcome |
+|--------|--------|
+| default_multihop | bundles delivered normally |
+| delayed_delivery | delivery delayed due to contact plan |
+| expiry_before_contact | bundle expiration occurs |
+

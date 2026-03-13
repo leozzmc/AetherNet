@@ -114,4 +114,30 @@ For more details, see:
 * `docs/artifacts.md`
 
 
-----
+## Demo
+
+Run the built-in AetherNet scenarios:
+
+```bash
+make compare
+```
+
+This produces scenario reports under:
+
+```
+artifacts/reports/
+```
+
+Example delivery timeline:
+
+```
+tel-001 delivered at tick 15
+tel-002 delivered at tick 16
+sci-001 delivered at tick 17
+```
+
+See:
+- `docs/demo.md`
+- `docs/artifacts.md`
+
+---
