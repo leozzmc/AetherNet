@@ -9,109 +9,148 @@ AetherNet explores how to build a secure, contact-aware, delay-tolerant message 
 - **AetherNet**: the core platform, routing policies, and simulation architecture
 - **LunarNet**: the reference deployment scenario using an `Earth ↔ LEO ↔ Moon` topology
 
-## Current MVP Capabilities
-This repository provides a repeatable, application-layer DTN experimental platform featuring:
-- contact-aware forwarding driven by contact windows
-- store-carry-forward behavior using a filesystem-backed DTN store
-- strict-priority delivery where telemetry is forwarded ahead of science data
-- multi-hop simulation across `lunar-node -> leo-relay -> ground-station`
-- retention and expiry handling for stale bundles
-- built-in experimental scenarios such as delayed delivery and expiry before contact
-- machine-readable JSON reports, scenario comparisons, and lightweight lifecycle timing summaries
+---
+
+## Architecture Overview
+
+
+AetherNet models a delay-tolerant multi-hop path across a simplified reference topology:
+
+- `lunar-node`
+- `leo-relay`
+- `ground-station`
+
+Bundles are generated at the lunar node, prioritized by bundle type, stored during disconnected periods, and forwarded only when contact windows are open.
+
+```mermaid
+flowchart LR
+    LN[Lunar Node]
+    RY[Relay Node]
+    GS[Ground Station]
+
+    subgraph AetherNet Logical Components
+        PQ[Strict Priority Queue]
+        CQ[Contact-Aware Routing]
+        DS[DTN Store]
+        RP[Reporting & Timelines]
+    end
+
+    LN -->|generate telemetry / science bundles| PQ
+    PQ --> CQ
+    CQ -->|store-carry-forward| DS
+    DS -->|forward during contact window| RY
+    RY -->|forward during contact window| GS
+    CQ -. lifecycle state .-> RP
+    DS -. timing data .-> RP
+```
+
+## Data Flow Example
+
+The following sequence demonstrates how Strict Priority and Store-Carry-Forward mechanisms interact across intermittent contact windows:
+
+
+> This example shows two contact windows: a first hop from lunar node to relay, followed by a later second hop from relay to ground station.
+
+```mermaid
+sequenceDiagram
+    participant L as Lunar Node
+    participant R as Relay Node
+    participant G as Ground Station
+
+    Note over L,R: Contact window 1 opens
+    L->>R: Forward telemetry bundle tel-001
+    R-->>R: Store at relay
+    L->>R: Forward telemetry bundle tel-002
+    R-->>R: Store at relay
+    L->>R: Forward science bundle sci-001
+    R-->>R: Store at relay
+
+    Note over R,G: Contact window 2 opens later
+    R->>G: Deliver tel-001
+    R->>G: Deliver tel-002
+    R->>G: Deliver sci-001
+```
+
+## Repository Structure
+```mermaid
+flowchart TD
+    SIM[sim/]
+    ROUTER[router/]
+    QUEUE[bundle_queue/]
+    STORE[store/]
+    METRICS[metrics/]
+    DOCS[docs/]
+    TESTS[tests/]
+
+    SIM --> ROUTER
+    SIM --> QUEUE
+    SIM --> STORE
+    SIM --> METRICS
+
+    DOCS --> SIM
+    TESTS --> SIM
+    TESTS --> ROUTER
+    TESTS --> QUEUE
+    TESTS --> STORE
+```
+
+---
+
+## Built-in Scenarios
+AetherNet currently includes three reference scenarios intended to demonstrate the core Phase-1 DTN behaviors of the platform:
+
+- `default_multihop` — normal multi-hop delivery with telemetry prioritized ahead of science traffic.
+- `delayed_delivery` — successful delivery with a significantly delayed second contact window (proving relay storage capabilities).
+- `expiry_before_contact` — a short-lived telemetry bundle expires before a usable contact window opens (proving retention and garbage collection).
 
 ## Quickstart
 
 ### 1. Environment setup
 AetherNet requires Python 3.10+.
-
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
-python -m pip install --upgrade pip
-python -m pip install -r requirements-dev.txt
-````
+make setup-dev
+```
 
-### 2. Local validation
-
-Run a quick local validation before pushing:
-
+### 2. Local Validation (Smoke Test)
+Run the smoke test to ensure core paths are intact before pushing changes:
 ```bash
 make smoke
 ```
 
-### 3. Run one scenario
-
-Using the Makefile shortcut:
-
+### 3. Run Experiments
+**Run a single scenario:**
 ```bash
 make demo
 ```
 
-Directly via script:
-
-```bash
-./scripts/run_demo.sh
-```
-
-### 4. Run all built-in scenarios
-
-Using the Makefile shortcut:
-
+**Run all built-in scenarios (Comparison):**
 ```bash
 make compare
 ```
+*Generated outputs are written under `artifacts/`. See `docs/artifacts.md` for details.*
 
-Directly via script:
-
-```bash
-./scripts/run_compare.sh
-```
-
-Generated outputs are written under `artifacts/`. See `docs/artifacts.md` for details.
-
-### 5. Run tests
-
+### 4. Run tests
 ```bash
 make test
 ```
 
-or:
-
-```bash
-pytest tests/
-```
-
 ## Developer Ergonomics & CI
+The project uses a lightweight `Makefile` as a convenience wrapper and tracks developer dependencies via `requirements-dev.txt`. A minimal GitHub Actions workflow is included to automatically validate pull requests. 
 
-The repo includes:
-
-* `requirements-dev.txt` for developer dependencies
-* a lightweight `Makefile` for common tasks
-* a minimal GitHub Actions workflow for automated test validation
-
-Useful commands:
-
-* `make setup-dev`
-* `make smoke`
-* `make demo`
-* `make compare`
-* `make test`
+For more details on contributing and interpreting the architecture, see:
+- `docs/development.md`
+- `docs/architecture.md`
+- `docs/reports.md`
 
 ## Current Limitations / Non-Goals
-
 The following remain intentionally out of scope for the current MVP:
-
-* real network transport (HTTP, gRPC, TCP/UDP data plane)
-* distributed task scheduling or Kubernetes/K3s orchestration
-* orbital mechanics or RF-layer physical simulation
-* database-backed persistence
-* production observability stack
-
-For more details, see:
-
-* `docs/development.md`
-* `docs/reports.md`
-* `docs/artifacts.md`
+- real network transport (HTTP, gRPC, TCP/UDP data plane)
+- distributed task scheduling or Kubernetes/K3s orchestration
+- orbital mechanics or RF-layer physical simulation
+- database-backed persistence
+- production observability stack
 
 
 ## Demo
