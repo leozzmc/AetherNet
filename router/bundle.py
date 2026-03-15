@@ -36,6 +36,12 @@ class Bundle:
     status: BundleStatus = BundleStatus.QUEUED
     next_hop: Optional[str] = None
 
+    # Wave-23 additive fragmentation metadata
+    is_fragment: bool = False
+    original_bundle_id: Optional[str] = None
+    fragment_index: Optional[int] = None
+    total_fragments: Optional[int] = None
+
     def __post_init__(self) -> None:
         if not self.id.strip():
             raise ValueError("Bundle id must not be empty.")
@@ -56,6 +62,16 @@ class Bundle:
         if not self.payload_ref.strip():
             raise ValueError("Bundle payload_ref must not be empty.")
 
+        if self.is_fragment:
+            if self.original_bundle_id is None or not self.original_bundle_id.strip():
+                raise ValueError("Fragment bundles must define original_bundle_id.")
+            if self.fragment_index is None or self.fragment_index < 0:
+                raise ValueError("Fragment bundles must define fragment_index >= 0.")
+            if self.total_fragments is None or self.total_fragments <= 0:
+                raise ValueError("Fragment bundles must define total_fragments > 0.")
+            if self.fragment_index >= self.total_fragments:
+                raise ValueError("fragment_index must be less than total_fragments.")
+
     def is_expired(self, current_time: int) -> bool:
         """A bundle is expired when elapsed time is greater than or equal to ttl_sec."""
         if current_time < self.created_at:
@@ -71,7 +87,7 @@ class Bundle:
         self.status = new_status
 
     def to_dict(self) -> dict:
-        return {
+        data = {
             "id": self.id,
             "type": self.type,
             "source": self.source,
@@ -84,3 +100,11 @@ class Bundle:
             "payload_ref": self.payload_ref,
             "status": self.status.value,
         }
+
+        if self.is_fragment:
+            data["is_fragment"] = self.is_fragment
+            data["original_bundle_id"] = self.original_bundle_id
+            data["fragment_index"] = self.fragment_index
+            data["total_fragments"] = self.total_fragments
+
+        return data
