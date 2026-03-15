@@ -24,6 +24,8 @@ from metrics.network_metrics import (
     compute_link_utilization
 )
 from node.node_runtime import NodeRuntime
+from protocol.reassembly_buffer import ReassemblyBuffer
+from protocol.reassembly import can_reassemble, reassemble_bundle
 
 
 RETENTION_INTERVAL = 5
@@ -92,8 +94,6 @@ class Simulator:
         self.injected_bundle_ids: List[str] = sorted(injected_bundle_ids or [])
         self.bundle_timelines: Dict[str, Dict[str, int]] = defaultdict(dict)
         self.capacity_manager = ContactWindowCapacityManager()
-        
-        # Wave-22: Organize state around NodeRuntime abstractions instead of raw queues
         self.nodes: Dict[str, NodeRuntime] = {
             "lunar-node": NodeRuntime("lunar-node", self.lunar_queue, role="source"),
             "leo-relay": NodeRuntime("leo-relay", self.relay_queue, role="relay"),
@@ -101,8 +101,14 @@ class Simulator:
         if extra_queues:
             for node_id, q in extra_queues.items():
                 self.nodes[node_id] = NodeRuntime(node_id, q, role="extra_relay")
+        # Wave-25: Destination-side reassembly buffers mapped by node_id
+        self.reassembly_buffers: Dict[str, ReassemblyBuffer] = {}      
                 
-                
+    def _get_reassembly_buffer(self, node_id: str) -> ReassemblyBuffer:
+        if node_id not in self.reassembly_buffers:
+            self.reassembly_buffers[node_id] = ReassemblyBuffer()
+        return self.reassembly_buffers[node_id]
+    
     @property
     def node_queues(self) -> Dict[str, StrictPriorityQueue]:
         """
@@ -234,23 +240,41 @@ class Simulator:
 
         ForwardingEngine.complete_forward(bundle, current_node)
 
-        # Wave-21 final-hop normalization:
-        # if the resolved next hop is the bundle destination, treat this as delivered
-        # even if the older forwarding engine logic did not explicitly mark it so.
-        if next_hop == bundle.destination and bundle.status != BundleStatus.DELIVERED:
-            if bundle.status == BundleStatus.STORED:
-                bundle.transition(BundleStatus.FORWARDING)
-            if bundle.status == BundleStatus.FORWARDING:
-                bundle.transition(BundleStatus.DELIVERED)
-
+        ForwardingEngine.complete_forward(bundle, current_node)
         self.store.save_bundle(bundle)
 
-        if bundle.status == BundleStatus.DELIVERED:
-            self.metrics.record_delivered(bundle.type)
-            if bundle.id not in self.delivered_bundle_ids:
+        # Wave-21 & Wave-25 Integration: Final hop logic
+        if next_hop == bundle.destination:
+            if bundle.status != BundleStatus.DELIVERED:
+                if bundle.status == BundleStatus.STORED:
+                    bundle.transition(BundleStatus.FORWARDING)
+                if bundle.status == BundleStatus.FORWARDING:
+                    bundle.transition(BundleStatus.DELIVERED)
+            
+            # Wave-25: Intercept fragments at destination
+            if bundle.is_fragment and bundle.original_bundle_id:
+                buffer = self._get_reassembly_buffer(bundle.destination)
+                buffer.add(bundle)
+                
+                # Check if we have a complete set
+                fragment_group = buffer.get(bundle.original_bundle_id)
+                if can_reassemble(fragment_group):
+                    full_bundle = reassemble_bundle(fragment_group)
+                    buffer.remove(bundle.original_bundle_id)
+                    
+                    # Store and record the reassembled bundle
+                    full_bundle.transition(BundleStatus.DELIVERED)
+                    self.store.save_bundle(full_bundle)
+                    self.metrics.record_delivered(full_bundle.type)
+                    self.delivered_bundle_ids.append(full_bundle.id)
+                    self._record_timeline_event(full_bundle.id, "delivered_tick", current_time)
+                    print(f"[t={current_time:02d}] REASSEMBLED {full_bundle.id} from fragments at {bundle.destination}")
+            else:
+                # Normal bundle delivery
+                self.metrics.record_delivered(bundle.type)
                 self.delivered_bundle_ids.append(bundle.id)
-            self._record_timeline_event(bundle.id, "delivered_tick", current_time)
-            print(f"[t={current_time:02d}] {bundle.id} delivered to {bundle.destination}")
+                self._record_timeline_event(bundle.id, "delivered_tick", current_time)
+                print(f"[t={current_time:02d}] {bundle.id} delivered to {bundle.destination}")
         else:
             self.metrics.record_stored(bundle.type)
             self._record_timeline_event(bundle.id, "stored_tick", current_time)
