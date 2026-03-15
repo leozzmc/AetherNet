@@ -17,6 +17,7 @@ class Contact:
     loss_percent: float = 0.0
     bidirectional: bool = False
     description: str = ""
+    capacity_bundles: int | None = None
 
     def is_active(self, current_time: int) -> bool:
         return self.start_time <= current_time < self.end_time
@@ -59,6 +60,10 @@ class ContactManager:
         self.contacts: List[Contact] = [self._parse_contact(c) for c in raw_plan.get("contacts", [])]
 
     def _parse_contact(self, raw: dict[str, Any]) -> Contact:
+        capacity_bundles = raw.get("capacity_bundles")
+        if capacity_bundles is not None and capacity_bundles < 0:
+            raise ValueError(f"capacity_bundles must be >= 0, got {capacity_bundles}")
+
         contact = Contact(
             source=raw["source"],
             target=raw["target"],
@@ -69,6 +74,7 @@ class ContactManager:
             loss_percent=raw.get("loss_percent", 0.0),
             bidirectional=raw.get("bidirectional", False),
             description=raw.get("description", ""),
+            capacity_bundles=capacity_bundles,
         )
         if contact.end_time <= contact.start_time:
             raise ValueError(

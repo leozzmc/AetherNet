@@ -6,7 +6,7 @@ from typing import List, Tuple, Optional, Dict, Any
 from collections import defaultdict
 
 from router.bundle import Bundle, BundleStatus
-from router.contact_manager import ContactManager
+from router.contact_manager import ContactManager, Contact
 from router.app import AetherRouter
 from router.forwarding import ForwardingEngine
 from router.policies import next_hop_for
@@ -18,12 +18,14 @@ from sim.event_loop import SimulationClock
 from metrics.exporter import MetricsCollector
 from sim.scenarios import get_scenario
 from sim.reporting import write_json_report
+from link.capacity_manager import ContactWindowCapacityManager
 
 RETENTION_INTERVAL = 5
 
+
 class Simulator:
     """Configurable multi-hop application-layer simulator.
-    
+
     Backward-compatibility:
     - New style:
         Simulator(router, store, lunar_queue, relay_queue, clock, metrics, ...)
@@ -43,7 +45,9 @@ class Simulator:
         injected_bundle_ids: Optional[List[str]] = None,
     ) -> None:
         if isinstance(router_or_contact_manager, ContactManager):
-            self.router = AetherRouter(router_or_contact_manager)
+            self.contact_manager = router_or_contact_manager
+            self.router = AetherRouter(self.contact_manager)
+
             if isinstance(relay_queue_or_clock, SimulationClock) and clock is None:
                 clock = relay_queue_or_clock
                 relay_queue = StrictPriorityQueue()
@@ -51,6 +55,19 @@ class Simulator:
                 relay_queue = relay_queue_or_clock if relay_queue_or_clock is not None else StrictPriorityQueue()
         else:
             self.router = router_or_contact_manager
+
+            # Resolve contact manager from the router in a backward-compatible way.
+            self.contact_manager = (
+                getattr(self.router, "contact_manager", None)
+                or getattr(self.router, "cm", None)
+                or getattr(self.router, "_contact_manager", None)
+            )
+            if self.contact_manager is None:
+                raise TypeError(
+                    "Simulator requires either a ContactManager or a router exposing "
+                    "contact_manager/cm/_contact_manager"
+                )
+
             relay_queue = relay_queue_or_clock if relay_queue_or_clock is not None else StrictPriorityQueue()
 
         if clock is None:
@@ -66,12 +83,11 @@ class Simulator:
         self.relay_link_up = False
         self.delivered_bundle_ids: List[str] = []
         self.injected_bundle_ids: List[str] = sorted(injected_bundle_ids or [])
-        
-        # Wave 9: Lightweight per-bundle lifecycle timelines
         self.bundle_timelines: Dict[str, Dict[str, int]] = defaultdict(dict)
+        self.capacity_manager = ContactWindowCapacityManager()
 
     def _record_timeline_event(self, bundle_id: str, event_key: str, current_time: int) -> None:
-        """Records the first occurrence of a specific lifecycle event for a bundle."""
+        """Record the first occurrence of a specific lifecycle event for a bundle."""
         if event_key not in self.bundle_timelines[bundle_id]:
             self.bundle_timelines[bundle_id][event_key] = current_time
 
@@ -79,11 +95,15 @@ class Simulator:
         lunar_up = self.router.can_forward_destination("lunar-node", "ground-station", current_time)
         relay_up = self.router.can_forward_destination("leo-relay", "ground-station", current_time)
 
-        if lunar_up and not self.lunar_link_up: print(f"[t={current_time:02d}] link up: lunar-node -> leo-relay")
-        elif not lunar_up and self.lunar_link_up: print(f"[t={current_time:02d}] link down: lunar-node -> leo-relay")
+        if lunar_up and not self.lunar_link_up:
+            print(f"[t={current_time:02d}] link up: lunar-node -> leo-relay")
+        elif not lunar_up and self.lunar_link_up:
+            print(f"[t={current_time:02d}] link down: lunar-node -> leo-relay")
 
-        if relay_up and not self.relay_link_up: print(f"[t={current_time:02d}] link up: leo-relay -> ground-station")
-        elif not relay_up and self.relay_link_up: print(f"[t={current_time:02d}] link down: leo-relay -> ground-station")
+        if relay_up and not self.relay_link_up:
+            print(f"[t={current_time:02d}] link up: leo-relay -> ground-station")
+        elif not relay_up and self.relay_link_up:
+            print(f"[t={current_time:02d}] link down: leo-relay -> ground-station")
 
         self.lunar_link_up = lunar_up
         self.relay_link_up = relay_up
@@ -109,23 +129,81 @@ class Simulator:
             self.metrics.record_expired(expired_types.get(bundle_id, "unknown"), bundle_id)
             self._record_timeline_event(bundle_id, "purged_tick", current_time)
 
+    def _find_matching_contact(
+        self,
+        current_node: str,
+        next_hop: Optional[str],
+        current_time: int,
+    ) -> Optional[Contact]:
+        """
+        Find an active contact that can carry traffic from current_node.
+
+        Preferred behavior:
+        - if next_hop is known, find the matching active contact for that hop
+        - if next_hop is None, fall back to the first active outgoing contact
+          from current_node (backward compatibility for older tests/scenarios)
+        """
+        active_contacts = self.contact_manager.get_active_contacts(current_time)
+
+        if next_hop is not None:
+            for contact in active_contacts:
+                if contact.allows(current_node, next_hop):
+                    return contact
+            return None
+
+        # Backward-compatible fallback:
+        # choose the first active contact that can carry traffic out of current_node
+        for contact in active_contacts:
+            if contact.source == current_node:
+                return contact
+            if contact.bidirectional and contact.target == current_node:
+                return contact
+
+        return None
+
     def _process_hop(self, current_node: str, outbound_queue: StrictPriorityQueue, current_time: int) -> Optional[Bundle]:
         if outbound_queue.size() == 0:
             return None
 
-        if not self.router.can_forward_destination(current_node, "ground-station", current_time):
+        bundle = outbound_queue.peek(current_time)
+        if bundle is None:
+            return None
+
+        next_hop = next_hop_for(current_node, bundle.destination)
+        contact = self._find_matching_contact(current_node, next_hop, current_time)
+        if contact is None:
+            return None
+
+        # If policy could not resolve next hop, derive it from the matched contact
+        # for backward compatibility with older tests/scenarios.
+        if next_hop is None:
+            if contact.source == current_node:
+                next_hop = contact.target
+            else:
+                next_hop = contact.source
+
+        if not self.capacity_manager.can_forward(contact):
             return None
 
         bundle = outbound_queue.dequeue(current_time)
         if bundle is None:
             return None
 
+        # Defensive consistency check: the dequeued bundle should still map to the same next hop.
+        resolved_next_hop = next_hop_for(current_node, bundle.destination)
+        if resolved_next_hop is not None and resolved_next_hop != next_hop:
+            raise RuntimeError(
+                f"Queue head changed unexpectedly during forwarding decision at {current_node} "
+                f"for bundle {bundle.id}"
+            )
+
+        self.capacity_manager.record_forward(contact)
+
         ForwardingEngine.begin_forward(bundle)
         self.store.save_bundle(bundle)
         self.metrics.record_forwarded(bundle.type)
         self._record_timeline_event(bundle.id, "first_forwarded_tick", current_time)
 
-        next_hop = next_hop_for(current_node, bundle.destination)
         print(f"[t={current_time:02d}] forwarding {bundle.type} {bundle.id} to {next_hop}")
 
         ForwardingEngine.complete_forward(bundle, current_node)
@@ -176,7 +254,7 @@ class Simulator:
             "purged_bundle_ids": metrics_snap.get("purged_bundle_ids", []),
             "injected_bundle_count": len(self.injected_bundle_ids),
             "injected_bundle_ids": self.injected_bundle_ids,
-            "bundle_timelines": dict(self.bundle_timelines), # Wave 9: Lightweight timeline
+            "bundle_timelines": dict(self.bundle_timelines),
             "notes": [
                 f"Simulation completed at t={self.clock.end_time}",
                 f"{len(store_remaining)} bundles remain in the DTN store.",
@@ -190,6 +268,7 @@ class Simulator:
             "last_queue_depths": metrics_snap.get("last_queue_depths", {}),
         }
         return report
+
 
 def create_default_simulator(
     plan_path: str,
