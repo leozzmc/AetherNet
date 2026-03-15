@@ -19,6 +19,12 @@ from metrics.exporter import MetricsCollector
 from sim.scenarios import get_scenario
 from sim.reporting import write_json_report
 from link.capacity_manager import ContactWindowCapacityManager
+from metrics.network_metrics import (
+    compute_store_depth_final,
+    compute_queue_depth_final,
+    compute_link_utilization
+)
+
 
 RETENTION_INTERVAL = 5
 
@@ -268,6 +274,48 @@ class Simulator:
             "last_queue_depths": metrics_snap.get("last_queue_depths", {}),
         }
         return report
+    
+    def build_final_report(self) -> Dict[str, Any]:
+        store_remaining = sorted(self.store.list_bundle_ids())
+        metrics_snap = self.metrics.snapshot()
+
+        # Wave-18: Compute additive network pressure metrics
+        network_metrics = {
+            "store_depth_final": compute_store_depth_final(self.store),
+            "queue_depth_final": compute_queue_depth_final(self.lunar_queue, self.relay_queue),
+            "link_utilization": compute_link_utilization(
+                self.contact_manager.contacts, 
+                self.capacity_manager
+            )
+        }
+
+        report = {
+            "scenario_name": self.scenario_name,
+            "simulation_start_time": self.clock.start_time,
+            "simulation_end_time": self.clock.end_time,
+            "tick_size": self.clock.tick_size,
+            "final_metrics": metrics_snap,
+            "network_metrics": network_metrics, # Wave-18 Additive Field
+            "store_bundle_ids_remaining": store_remaining,
+            "delivered_bundle_ids": sorted(self.delivered_bundle_ids),
+            "purged_bundle_ids": metrics_snap.get("purged_bundle_ids", []),
+            "injected_bundle_count": len(self.injected_bundle_ids),
+            "injected_bundle_ids": self.injected_bundle_ids,
+            "bundle_timelines": dict(self.bundle_timelines),
+            "notes": [
+                f"Simulation completed at t={self.clock.end_time}",
+                f"{len(store_remaining)} bundles remain in the DTN store.",
+            ],
+            "bundles_forwarded_total": metrics_snap.get("bundles_forwarded_total", {}),
+            "bundles_delivered_total": metrics_snap.get("bundles_delivered_total", {}),
+            "bundles_stored_total": metrics_snap.get("bundles_stored_total", {}),
+            "bundles_expired_total": metrics_snap.get("bundles_expired_total", {}),
+            "recent_purged_ids": metrics_snap.get("recent_purged_ids", []),
+            "queue_depths": metrics_snap.get("queue_depths", {}),
+            "last_queue_depths": metrics_snap.get("last_queue_depths", {}),
+        }
+        return report
+    
 
 
 def create_default_simulator(
@@ -395,6 +443,10 @@ def main() -> None:
             else:
                 print("Final Metrics Snapshot:")
                 print(json.dumps(report.get("final_metrics", {}), indent=2))
+            network_metrics = report.get("network_metrics")
+            if network_metrics is not None:
+                print("\nNetwork Metrics:")
+                print(json.dumps(network_metrics, indent=2))
     finally:
         if plan_path.exists():
             plan_path.unlink()
