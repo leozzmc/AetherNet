@@ -9,7 +9,6 @@ from router.bundle import Bundle, BundleStatus
 from router.contact_manager import ContactManager, Contact
 from router.app import AetherRouter
 from router.forwarding import ForwardingEngine
-from router.policies import next_hop_for
 from bundle_queue.priority_queue import StrictPriorityQueue
 from bundle_queue.classifiers import classify_bundle
 from store.store import DTNStore
@@ -175,7 +174,7 @@ class Simulator:
         if bundle is None:
             return None
 
-        next_hop = next_hop_for(current_node, bundle.destination)
+        next_hop = self.router.get_next_hop(current_node, bundle.destination)
         contact = self._find_matching_contact(current_node, next_hop, current_time)
         if contact is None:
             return None
@@ -196,7 +195,7 @@ class Simulator:
             return None
 
         # Defensive consistency check: the dequeued bundle should still map to the same next hop.
-        resolved_next_hop = next_hop_for(current_node, bundle.destination)
+        resolved_next_hop = self.router.get_next_hop(current_node, bundle.destination)
         if resolved_next_hop is not None and resolved_next_hop != next_hop:
             raise RuntimeError(
                 f"Queue head changed unexpectedly during forwarding decision at {current_node} "
