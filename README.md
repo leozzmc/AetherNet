@@ -2,6 +2,8 @@
 
 **A Secure Delay-Tolerant Distributed Infrastructure Prototype for Space Networks**
 
+
+![Aether Cover](/img/cover.png)
 ## Project Purpose
 AetherNet explores how to build a secure, contact-aware, delay-tolerant message infrastructure for space-like environments characterized by intermittent connectivity and extreme latency.
 
