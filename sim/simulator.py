@@ -23,6 +23,7 @@ from metrics.network_metrics import (
     compute_queue_depth_final,
     compute_link_utilization
 )
+from node.node_runtime import NodeRuntime
 
 
 RETENTION_INTERVAL = 5
@@ -92,13 +93,24 @@ class Simulator:
         self.bundle_timelines: Dict[str, Dict[str, int]] = defaultdict(dict)
         self.capacity_manager = ContactWindowCapacityManager()
         
-        # Wave-21: Unified node queues dictionary for generalized traversal
-        self.node_queues = {
-            "lunar-node": self.lunar_queue,
-            "leo-relay": self.relay_queue,
+        # Wave-22: Organize state around NodeRuntime abstractions instead of raw queues
+        self.nodes: Dict[str, NodeRuntime] = {
+            "lunar-node": NodeRuntime("lunar-node", self.lunar_queue, role="source"),
+            "leo-relay": NodeRuntime("leo-relay", self.relay_queue, role="relay"),
         }
         if extra_queues:
-            self.node_queues.update(extra_queues)
+            for node_id, q in extra_queues.items():
+                self.nodes[node_id] = NodeRuntime(node_id, q, role="extra_relay")
+                
+                
+    @property
+    def node_queues(self) -> Dict[str, StrictPriorityQueue]:
+        """
+        Backward-compatibility helper property.
+        Dynamically projects the self.nodes dict back into a simple {node_id: queue} mapping.
+        This ensures existing tick() processing and Wave-21 metrics helpers function flawlessly.
+        """
+        return {node_id: node.queue for node_id, node in self.nodes.items()}
 
     def _record_timeline_event(self, bundle_id: str, event_key: str, current_time: int) -> None:
         """Record the first occurrence of a specific lifecycle event for a bundle."""
