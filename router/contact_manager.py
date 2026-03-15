@@ -30,11 +30,6 @@ class Contact:
         return False
 
     def to_link_model(self) -> LinkModel:
-        """
-        Convert the Phase-1 Contact domain object into a Phase-2 LinkModel.
-
-        This is a pure adapter and must not change existing Contact semantics.
-        """
         return LinkModel(
             source=self.source,
             target=self.target,
@@ -69,8 +64,9 @@ class ContactManager:
             target=raw["target"],
             start_time=raw["start_time"],
             end_time=raw["end_time"],
-            one_way_delay_ms=raw["one_way_delay_ms"],
-            bandwidth_kbit=raw["bandwidth_kbit"],
+            # Backward-compatible defaults for simpler plans/tests
+            one_way_delay_ms=raw.get("one_way_delay_ms", 0),
+            bandwidth_kbit=raw.get("bandwidth_kbit", 0),
             loss_percent=raw.get("loss_percent", 0.0),
             bidirectional=raw.get("bidirectional", False),
             description=raw.get("description", ""),
@@ -90,15 +86,7 @@ class ContactManager:
         return any(contact.is_active(current_time) and contact.allows(source, target) for contact in self.contacts)
 
     def get_link_models(self) -> List[LinkModel]:
-        """
-        Return all contacts as Phase-2 LinkModel objects.
-
-        This helper is additive and must not affect existing Phase-1 behavior.
-        """
         return [contact.to_link_model() for contact in self.contacts]
 
     def get_active_link_models(self, current_time: int) -> List[LinkModel]:
-        """
-        Return all active LinkModel objects at the given simulation tick.
-        """
         return [contact.to_link_model() for contact in self.get_active_contacts(current_time)]
