@@ -109,3 +109,41 @@ def test_expired_high_priority_does_not_block_lower_priority():
     assert expired_high.status == BundleStatus.EXPIRED
     assert out is not None
     assert out.id == "low"
+    
+    
+def test_peek_returns_highest_priority_without_removal():
+    q = StrictPriorityQueue()
+
+    b_sci = Bundle(
+        id="sci-1",
+        type="science",
+        source="lunar-node",
+        destination="ground",
+        priority=50,
+        created_at=0,
+        ttl_sec=60,
+        size_bytes=10,
+        payload_ref="ref",
+    )
+    b_tel = Bundle(
+        id="tel-1",
+        type="telemetry",
+        source="lunar-node",
+        destination="ground",
+        priority=100,
+        created_at=0,
+        ttl_sec=60,
+        size_bytes=10,
+        payload_ref="ref",
+    )
+
+    q.enqueue(b_sci)
+    q.enqueue(b_tel)
+
+    peeked = q.peek(0)
+    assert peeked is b_tel
+    assert q.size() == 2
+
+    dequeued = q.dequeue(0)
+    assert dequeued is b_tel
+    assert q.size() == 1

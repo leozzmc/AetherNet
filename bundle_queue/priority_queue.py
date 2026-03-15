@@ -24,19 +24,44 @@ class StrictPriorityQueue:
             self.queues[prio] = deque()
         self.queues[prio].append(bundle)
 
+    def _discard_expired_heads(self, current_time: int) -> None:
+        """
+        Remove expired bundles only from queue heads, matching the same traversal
+        semantics used by dequeue/peek.
+        """
+        for prio in sorted(self.queues.keys(), reverse=True):
+            q = self.queues[prio]
+            while q and q[0].is_expired(current_time):
+                expired = q.popleft()
+                expired.transition(BundleStatus.EXPIRED)
+
+    def peek(self, current_time: int) -> Optional[Bundle]:
+        """
+        Return the highest-priority non-expired bundle without removing it.
+
+        Expired bundles at queue heads are marked EXPIRED and discarded so that
+        peek() and dequeue() observe the same effective queue semantics.
+        """
+        self._discard_expired_heads(current_time)
+
+        for prio in sorted(self.queues.keys(), reverse=True):
+            q = self.queues[prio]
+            if q:
+                return q[0]
+
+        return None
+
     def dequeue(self, current_time: int) -> Optional[Bundle]:
         """
         Return the highest-priority non-expired bundle.
         Expired bundles are marked EXPIRED and discarded.
         """
+        self._discard_expired_heads(current_time)
+
         for prio in sorted(self.queues.keys(), reverse=True):
             q = self.queues[prio]
-            while q:
-                bundle = q.popleft()
-                if bundle.is_expired(current_time):
-                    bundle.transition(BundleStatus.EXPIRED)
-                    continue
-                return bundle
+            if q:
+                return q.popleft()
 
         return None
 
