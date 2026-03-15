@@ -48,6 +48,7 @@ class Simulator:
         metrics: Optional[MetricsCollector] = None,
         scenario_name: str = "custom",
         injected_bundle_ids: Optional[List[str]] = None,
+        extra_queues: Optional[Dict[str, StrictPriorityQueue]] = None, # Wave-21 Additive parameter
     ) -> None:
         if isinstance(router_or_contact_manager, ContactManager):
             self.contact_manager = router_or_contact_manager
@@ -90,6 +91,14 @@ class Simulator:
         self.injected_bundle_ids: List[str] = sorted(injected_bundle_ids or [])
         self.bundle_timelines: Dict[str, Dict[str, int]] = defaultdict(dict)
         self.capacity_manager = ContactWindowCapacityManager()
+        
+        # Wave-21: Unified node queues dictionary for generalized traversal
+        self.node_queues = {
+            "lunar-node": self.lunar_queue,
+            "leo-relay": self.relay_queue,
+        }
+        if extra_queues:
+            self.node_queues.update(extra_queues)
 
     def _record_timeline_event(self, bundle_id: str, event_key: str, current_time: int) -> None:
         """Record the first occurrence of a specific lifecycle event for a bundle."""
@@ -212,11 +221,22 @@ class Simulator:
         print(f"[t={current_time:02d}] forwarding {bundle.type} {bundle.id} to {next_hop}")
 
         ForwardingEngine.complete_forward(bundle, current_node)
+
+        # Wave-21 final-hop normalization:
+        # if the resolved next hop is the bundle destination, treat this as delivered
+        # even if the older forwarding engine logic did not explicitly mark it so.
+        if next_hop == bundle.destination and bundle.status != BundleStatus.DELIVERED:
+            if bundle.status == BundleStatus.STORED:
+                bundle.transition(BundleStatus.FORWARDING)
+            if bundle.status == BundleStatus.FORWARDING:
+                bundle.transition(BundleStatus.DELIVERED)
+
         self.store.save_bundle(bundle)
 
         if bundle.status == BundleStatus.DELIVERED:
             self.metrics.record_delivered(bundle.type)
-            self.delivered_bundle_ids.append(bundle.id)
+            if bundle.id not in self.delivered_bundle_ids:
+                self.delivered_bundle_ids.append(bundle.id)
             self._record_timeline_event(bundle.id, "delivered_tick", current_time)
             print(f"[t={current_time:02d}] {bundle.id} delivered to {bundle.destination}")
         else:
@@ -230,14 +250,32 @@ class Simulator:
         self._update_link_logs(current_time)
         self._apply_retention(current_time)
 
-        moved_to_relay = self._process_hop("lunar-node", self.lunar_queue, current_time)
-        if moved_to_relay is not None and moved_to_relay.status == BundleStatus.STORED:
-            self.relay_queue.enqueue(moved_to_relay)
+        # Predictable topological sort for standard scenarios to allow same-tick multi-hop behaviors.
+        # This prevents breaking existing timelines where lunar->relay->ground happens instantly.
+        processing_order = ["lunar-node", "relay-a", "relay-b", "leo-relay"]
+        
+        # Safely append any unexpected nodes dynamically injected via extra_queues
+        for node in self.node_queues:
+            if node not in processing_order:
+                processing_order.append(node)
 
-        self._process_hop("leo-relay", self.relay_queue, current_time)
+        for current_node in processing_order:
+            if current_node not in self.node_queues:
+                continue
 
-        self.metrics.set_queue_depth("queue_depth_lunar", self.lunar_queue.size())
-        self.metrics.set_queue_depth("queue_depth_relay", self.relay_queue.size())
+            outbound_queue = self.node_queues[current_node]
+            moved_bundle = self._process_hop(current_node, outbound_queue, current_time)
+
+            if moved_bundle is not None and moved_bundle.status == BundleStatus.STORED:
+                # Wave-21: Use router abstraction to find the next hop queue
+                next_hop = self.router.get_next_hop(current_node, moved_bundle.destination)
+                if next_hop is not None and next_hop in self.node_queues:
+                    self.node_queues[next_hop].enqueue(moved_bundle)
+
+        # Dynamic metrics tracking
+        for node_name, q in self.node_queues.items():
+            safe_name = node_name.replace("-", "_")
+            self.metrics.set_queue_depth(f"queue_depth_{safe_name}", q.size())
 
     def run(self) -> Dict[str, Any]:
         for t in self.clock.ticks():
@@ -248,44 +286,13 @@ class Simulator:
         store_remaining = sorted(self.store.list_bundle_ids())
         metrics_snap = self.metrics.snapshot()
 
-        report = {
-            "scenario_name": self.scenario_name,
-            "simulation_start_time": self.clock.start_time,
-            "simulation_end_time": self.clock.end_time,
-            "tick_size": self.clock.tick_size,
-            "final_metrics": metrics_snap,
-            "store_bundle_ids_remaining": store_remaining,
-            "delivered_bundle_ids": sorted(self.delivered_bundle_ids),
-            "purged_bundle_ids": metrics_snap.get("purged_bundle_ids", []),
-            "injected_bundle_count": len(self.injected_bundle_ids),
-            "injected_bundle_ids": self.injected_bundle_ids,
-            "bundle_timelines": dict(self.bundle_timelines),
-            "notes": [
-                f"Simulation completed at t={self.clock.end_time}",
-                f"{len(store_remaining)} bundles remain in the DTN store.",
-            ],
-            "bundles_forwarded_total": metrics_snap.get("bundles_forwarded_total", {}),
-            "bundles_delivered_total": metrics_snap.get("bundles_delivered_total", {}),
-            "bundles_stored_total": metrics_snap.get("bundles_stored_total", {}),
-            "bundles_expired_total": metrics_snap.get("bundles_expired_total", {}),
-            "recent_purged_ids": metrics_snap.get("recent_purged_ids", []),
-            "queue_depths": metrics_snap.get("queue_depths", {}),
-            "last_queue_depths": metrics_snap.get("last_queue_depths", {}),
-        }
-        return report
-    
-    def build_final_report(self) -> Dict[str, Any]:
-        store_remaining = sorted(self.store.list_bundle_ids())
-        metrics_snap = self.metrics.snapshot()
-
-        # Wave-18: Compute additive network pressure metrics
         network_metrics = {
             "store_depth_final": compute_store_depth_final(self.store),
-            "queue_depth_final": compute_queue_depth_final(self.lunar_queue, self.relay_queue),
+            "queue_depth_final": compute_queue_depth_final(self.node_queues),
             "link_utilization": compute_link_utilization(
-                self.contact_manager.contacts, 
-                self.capacity_manager
-            )
+                self.contact_manager.contacts,
+                self.capacity_manager,
+            ),
         }
 
         report = {
@@ -294,7 +301,7 @@ class Simulator:
             "simulation_end_time": self.clock.end_time,
             "tick_size": self.clock.tick_size,
             "final_metrics": metrics_snap,
-            "network_metrics": network_metrics, # Wave-18 Additive Field
+            "network_metrics": network_metrics,
             "store_bundle_ids_remaining": store_remaining,
             "delivered_bundle_ids": sorted(self.delivered_bundle_ids),
             "purged_bundle_ids": metrics_snap.get("purged_bundle_ids", []),
@@ -309,12 +316,13 @@ class Simulator:
             "bundles_delivered_total": metrics_snap.get("bundles_delivered_total", {}),
             "bundles_stored_total": metrics_snap.get("bundles_stored_total", {}),
             "bundles_expired_total": metrics_snap.get("bundles_expired_total", {}),
+            "bundles_dropped_total": metrics_snap.get("bundles_dropped_total", {}),
+            "dropped_bundle_ids": metrics_snap.get("dropped_bundle_ids", []),
             "recent_purged_ids": metrics_snap.get("recent_purged_ids", []),
             "queue_depths": metrics_snap.get("queue_depths", {}),
             "last_queue_depths": metrics_snap.get("last_queue_depths", {}),
         }
         return report
-    
 
 
 def create_default_simulator(
