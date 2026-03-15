@@ -60,6 +60,19 @@ class ContactWindowCapacityManager:
         key = self._get_key(contact)
         current_usage = self._usage.get(key, 0)
         return max(0, contact.capacity_bundles - current_usage)
+    
+    # Wave-18 Additive method for read-only observability
+    def get_usage(self, contact: Contact) -> int:
+        """
+        Return the exact number of bundles forwarded in this contact window.
+        Returns 0 if the contact has unlimited capacity (as it isn't tracked),
+        or if no bundles have been forwarded yet.
+        """
+        if contact.capacity_bundles is None:
+            return 0
+            
+        key = self._get_key(contact)
+        return self._usage.get(key, 0)
 
     def reset(self) -> None:
         self._usage.clear()
