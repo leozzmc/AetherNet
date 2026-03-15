@@ -3,6 +3,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, List
 
+from link.link_model import LinkModel
+
 
 @dataclass(frozen=True)
 class Contact:
@@ -25,6 +27,24 @@ class Contact:
         if self.bidirectional and self.source == target and self.target == source:
             return True
         return False
+
+    def to_link_model(self) -> LinkModel:
+        """
+        Convert the Phase-1 Contact domain object into a Phase-2 LinkModel.
+
+        This is a pure adapter and must not change existing Contact semantics.
+        """
+        return LinkModel(
+            source=self.source,
+            target=self.target,
+            start_time=self.start_time,
+            end_time=self.end_time,
+            one_way_delay_ms=self.one_way_delay_ms,
+            bandwidth_kbit=self.bandwidth_kbit,
+            loss_percent=self.loss_percent,
+            bidirectional=self.bidirectional,
+            description=self.description,
+        )
 
 
 class ContactManager:
@@ -62,3 +82,17 @@ class ContactManager:
 
     def is_forwarding_allowed(self, source: str, target: str, current_time: int) -> bool:
         return any(contact.is_active(current_time) and contact.allows(source, target) for contact in self.contacts)
+
+    def get_link_models(self) -> List[LinkModel]:
+        """
+        Return all contacts as Phase-2 LinkModel objects.
+
+        This helper is additive and must not affect existing Phase-1 behavior.
+        """
+        return [contact.to_link_model() for contact in self.contacts]
+
+    def get_active_link_models(self, current_time: int) -> List[LinkModel]:
+        """
+        Return all active LinkModel objects at the given simulation tick.
+        """
+        return [contact.to_link_model() for contact in self.get_active_contacts(current_time)]
