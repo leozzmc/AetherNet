@@ -3,6 +3,7 @@ from pathlib import Path
 from typing import List
 
 from router.bundle import Bundle, BundleStatus
+from protocol.bundle import BundleProtocolV1
 
 
 class DTNStore:
@@ -19,7 +20,8 @@ class DTNStore:
         """Serialize and persist a bundle's metadata to disk."""
         path = self._get_path(bundle.id)
         with path.open("w", encoding="utf-8") as f:
-            json.dump(bundle.to_dict(), f, indent=2)
+            # Delegate to the Protocol layer for canonical serialization format
+            json.dump(BundleProtocolV1.to_dict(bundle), f, indent=2)
         return path
 
     def load_bundle(self, bundle_id: str) -> Bundle:
@@ -32,8 +34,8 @@ class DTNStore:
             data = json.load(f)
 
         try:
-            data["status"] = BundleStatus(data["status"])
-            return Bundle(**data)
+            # Delegate to the Protocol layer for safe deserialization
+            return BundleProtocolV1.from_dict(data)
         except (KeyError, TypeError, ValueError) as e:
             raise ValueError(f"Malformed bundle data for {bundle_id}: {e}") from e
 
