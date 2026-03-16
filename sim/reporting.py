@@ -1,6 +1,6 @@
 import json
 from pathlib import Path
-from typing import Dict, Any, List
+from typing import Any, Dict, List
 
 
 def summarize_report(report: Dict[str, Any], initial_injected_count: int = 0) -> Dict[str, Any]:
@@ -10,6 +10,13 @@ def summarize_report(report: Dict[str, Any], initial_injected_count: int = 0) ->
     stored_total = sum(metrics.get("bundles_stored_total", {}).values())
     delivered_total = sum(metrics.get("bundles_delivered_total", {}).values())
     expired_total = sum(metrics.get("bundles_expired_total", {}).values())
+    dropped_total = sum(metrics.get("bundles_dropped_total", {}).values())
+
+    fragments_forwarded_total = sum(metrics.get("fragments_forwarded_total", {}).values())
+    fragments_stored_total = sum(metrics.get("fragments_stored_total", {}).values())
+    fragments_delivered_total = sum(metrics.get("fragments_delivered_total", {}).values())
+    fragments_expired_total = sum(metrics.get("fragments_expired_total", {}).values())
+    fragments_dropped_total = sum(metrics.get("fragments_dropped_total", {}).values())
 
     remaining_store_count = len(report.get("store_bundle_ids_remaining", []))
     purged_count = len(report.get("purged_bundle_ids", []))
@@ -57,6 +64,12 @@ def summarize_report(report: Dict[str, Any], initial_injected_count: int = 0) ->
         "stored_total": stored_total,
         "delivered_total": delivered_total,
         "expired_total": expired_total,
+        "dropped_total": dropped_total,
+        "fragments_forwarded_total": fragments_forwarded_total,
+        "fragments_stored_total": fragments_stored_total,
+        "fragments_delivered_total": fragments_delivered_total,
+        "fragments_expired_total": fragments_expired_total,
+        "fragments_dropped_total": fragments_dropped_total,
         "remaining_store_count": remaining_store_count,
         "purged_count": purged_count,
         "delivered_bundle_count": delivered_bundle_count,
@@ -80,6 +93,12 @@ def compare_reports(reports: List[Dict[str, Any]]) -> Dict[str, Any]:
     total_expired_bundles = sum(s["expired_total"] for s in summaries)
     total_purged_bundles = sum(s["purged_count"] for s in summaries)
 
+    total_forwarded_fragments = sum(s["fragments_forwarded_total"] for s in summaries)
+    total_stored_fragments = sum(s["fragments_stored_total"] for s in summaries)
+    total_delivered_fragments = sum(s["fragments_delivered_total"] for s in summaries)
+    total_expired_fragments = sum(s["fragments_expired_total"] for s in summaries)
+    total_dropped_fragments = sum(s["fragments_dropped_total"] for s in summaries)
+
     successful_scenarios = [s["scenario_name"] for s in summaries if s["outcome"] == "successful_delivery"]
     scenarios_with_expiry = [s["scenario_name"] for s in summaries if s["outcome"] == "expiry_observed"]
 
@@ -101,6 +120,11 @@ def compare_reports(reports: List[Dict[str, Any]]) -> Dict[str, Any]:
             "total_delivered_bundles": total_delivered_bundles,
             "total_expired_bundles": total_expired_bundles,
             "total_purged_bundles": total_purged_bundles,
+            "total_forwarded_fragments": total_forwarded_fragments,
+            "total_stored_fragments": total_stored_fragments,
+            "total_delivered_fragments": total_delivered_fragments,
+            "total_expired_fragments": total_expired_fragments,
+            "total_dropped_fragments": total_dropped_fragments,
             "successful_scenarios": successful_scenarios,
             "scenarios_with_expiry": scenarios_with_expiry,
             "max_remaining_store_count": max_remaining,
