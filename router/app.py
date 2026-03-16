@@ -33,13 +33,18 @@ class AetherRouter:
             return StaticRoutingPolicy(routing_table)
         return LegacyRoutingPolicy()
 
-    def get_next_hop(self, current_node: str, destination: str) -> str | None:
+    def get_next_hop(
+        self,
+        current_node: str,
+        destination: str,
+        current_time: int = 0,
+    ) -> str | None:
         """
-        Preferred Wave-20 routing lookup entrypoint.
+        Preferred routing lookup entrypoint.
 
-        Priority:
-        1. injected routing policy
-        2. default policy derived from routing table / legacy fallback
+        Backward compatibility:
+        - older callers may omit current_time and will default to 0
+        - time-aware policies may use current_time when provided
         """
         bundle = Bundle(
             id="__routing_lookup__",
@@ -55,14 +60,19 @@ class AetherRouter:
         return self.routing_policy.select_next_hop(
             current_node=current_node,
             bundle=bundle,
-            current_time=0,
+            current_time=current_time,
         )
 
-    def next_hop(self, current_node: str, destination: str) -> str | None:
+    def next_hop(
+        self,
+        current_node: str,
+        destination: str,
+        current_time: int = 0,
+    ) -> str | None:
         """
         Backward-compatible alias retained for older code/tests.
         """
-        return self.get_next_hop(current_node, destination)
+        return self.get_next_hop(current_node, destination, current_time=current_time)
 
     def can_forward(self, current_node: str, bundle: Bundle, current_time: int) -> bool:
         next_node = self.routing_policy.select_next_hop(
@@ -75,7 +85,7 @@ class AetherRouter:
         return self.cm.is_forwarding_allowed(current_node, next_node, current_time)
 
     def can_forward_destination(self, current_node: str, destination: str, current_time: int) -> bool:
-        next_node = self.get_next_hop(current_node, destination)
+        next_node = self.get_next_hop(current_node, destination, current_time=current_time)
         if not next_node or next_node == current_node:
             return False
         return self.cm.is_forwarding_allowed(current_node, next_node, current_time)
