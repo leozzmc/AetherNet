@@ -100,7 +100,7 @@ def test_lexical_tie_break_for_equal_bundles():
 def test_congestion_metrics_update_correctly():
     metrics = CongestionMetrics(max_store_bytes=1000)
 
-    metrics.record_drops(0)
+    metrics.record_drops(0, 0)
     metrics.update_store_bytes(500)
 
     snap1 = metrics.snapshot()
@@ -108,12 +108,13 @@ def test_congestion_metrics_update_correctly():
     assert snap1["bundles_dropped"] == 0
     assert snap1["current_store_bytes"] == 500
 
-    metrics.record_drops(2)
+    metrics.record_drops(2, 200)
     metrics.update_store_bytes(1000)
 
     snap2 = metrics.snapshot()
     assert snap2["overflow_events"] == 1
     assert snap2["bundles_dropped"] == 2
+    assert snap2["dropped_bytes"] == 200
     assert snap2["current_store_bytes"] == 1000
 
 
@@ -143,6 +144,7 @@ def test_router_store_bundle_enforces_capacity_and_updates_metrics(tmp_path):
     assert snap["current_store_bytes"] == 200
     assert snap["overflow_events"] == 1
     assert snap["bundles_dropped"] == 1
+    assert snap["dropped_bytes"] == 100
 
 
 def test_router_store_bundle_is_backward_compatible_with_infinite_capacity(tmp_path):
@@ -164,3 +166,4 @@ def test_router_store_bundle_is_backward_compatible_with_infinite_capacity(tmp_p
     assert snap["current_store_bytes"] == 750
     assert snap["overflow_events"] == 0
     assert snap["bundles_dropped"] == 0
+    
