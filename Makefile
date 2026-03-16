@@ -45,3 +45,11 @@ clean-artifacts:
 
 reset-env:
 	./scripts/reset_env.sh
+
+.PHONY: clean
+
+clean:
+	find . -type d -name "__pycache__" -exec rm -rf {} +
+	find . -type d -name ".pytest_cache" -exec rm -rf {} +
+	rm -rf artifacts/reports/*
+	@echo "✨ Cleaned up __pycache__, .pytest_cache, and old reports!"
