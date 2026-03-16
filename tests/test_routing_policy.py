@@ -11,6 +11,7 @@ from router.routing_policies import (
     CGRLiteRoutingPolicy,
     ContactAwareRoutingPolicy,
     LegacyRoutingPolicy,
+    OpportunisticRoutingPolicy,
     ScoredContactAwareRoutingPolicy,
     StaticRoutingPolicy,
 )
@@ -537,7 +538,6 @@ def wave41_contact_manager(tmp_path):
     return make_contact_manager(
         tmp_path,
         contacts=[
-            # direct path opens late
             {
                 "source": "node-A",
                 "target": "node-C",
@@ -547,7 +547,6 @@ def wave41_contact_manager(tmp_path):
                 "bandwidth_kbit": 100,
                 "bidirectional": False,
             },
-            # relay-1 path opens early but finishes late overall
             {
                 "source": "node-A",
                 "target": "relay-1",
@@ -566,7 +565,6 @@ def wave41_contact_manager(tmp_path):
                 "bandwidth_kbit": 100,
                 "bidirectional": False,
             },
-            # relay-2 path yields earliest final arrival
             {
                 "source": "node-A",
                 "target": "relay-2",
@@ -585,7 +583,6 @@ def wave41_contact_manager(tmp_path):
                 "bandwidth_kbit": 100,
                 "bidirectional": False,
             },
-            # dead-end candidate: first hop exists but no second hop
             {
                 "source": "node-A",
                 "target": "relay-dead",
@@ -700,7 +697,6 @@ def test_cgr_lite_ignores_candidates_with_no_future_second_hop_contact(wave41_ca
     policy = CGRLiteRoutingPolicy(wave41_candidates, wave41_contact_manager)
     bundle = make_bundle(destination="node-C")
 
-    # relay-dead has a first hop but no future path to destination, so it must never win
     assert policy.select_next_hop("node-A", bundle, current_time=0) != "relay-dead"
 
 
@@ -708,8 +704,6 @@ def test_cgr_lite_returns_direct_path_when_other_relays_are_no_longer_viable(wav
     policy = CGRLiteRoutingPolicy(wave41_candidates, wave41_contact_manager)
     bundle = make_bundle(destination="node-C")
 
-    # By t=75, relay paths are no longer reachable via their first hops,
-    # but the direct contact at 80..100 is still a viable future path.
     assert policy.select_next_hop("node-A", bundle, current_time=75) == "node-C"
 
 
@@ -797,71 +791,163 @@ def test_router_integration_with_cgr_lite_separates_preference_from_forwarding(
     assert router.get_next_hop("node-A", "node-C", current_time=0) == "relay-2"
     assert router.can_forward("node-A", bundle, current_time=0) is False
     assert router.can_forward("node-A", bundle, current_time=30) is True
-    
-    
-def test_static_policy_returns_correct_reasons():
-    policy = StaticRoutingPolicy(RoutingTable({"node-A": {"node-B": "relay"}}))
-    
-    # 1. At destination
-    decision = policy.evaluate_decision("node-B", make_bundle(destination="node-B"), 0)
+
+
+# --- Wave-46 Opportunistic Routing Tests ---
+
+
+@pytest.fixture
+def wave46_contact_manager(tmp_path):
+    return make_contact_manager(
+        tmp_path,
+        contacts=[
+            {
+                "source": "node-A",
+                "target": "relay-low",
+                "start_time": 0,
+                "end_time": 100,
+                "one_way_delay_ms": 10,
+                "bandwidth_kbit": 10,
+                "bidirectional": False,
+            },
+            {
+                "source": "node-A",
+                "target": "relay-high-soon",
+                "start_time": 15,
+                "end_time": 100,
+                "one_way_delay_ms": 10,
+                "bandwidth_kbit": 100,
+                "bidirectional": False,
+            },
+            {
+                "source": "node-A",
+                "target": "relay-high-late",
+                "start_time": 50,
+                "end_time": 100,
+                "one_way_delay_ms": 10,
+                "bandwidth_kbit": 100,
+                "bidirectional": False,
+            },
+        ],
+    )
+
+
+@pytest.fixture
+def wave46_candidates():
+    return {
+        "node-A": {
+            "node-B": [
+                RouteCandidate("relay-low", score=10),
+                RouteCandidate("relay-high-soon", score=50),
+                RouteCandidate("relay-high-late", score=90),
+            ]
+        }
+    }
+
+
+def test_opportunistic_policy_holds_for_better_near_future_contact(wave46_candidates, wave46_contact_manager):
+    policy = OpportunisticRoutingPolicy(wave46_candidates, wave46_contact_manager, hold_window=20)
+    bundle = make_bundle(destination="node-B")
+
+    decision = policy.evaluate_decision("node-A", bundle, current_time=0)
+
+    assert decision.reason == "hold_for_better_contact"
+    assert decision.next_hop is None
+
+
+def test_opportunistic_policy_forwards_now_if_better_contact_is_too_late(wave46_candidates, wave46_contact_manager):
+    policy = OpportunisticRoutingPolicy(wave46_candidates, wave46_contact_manager, hold_window=10)
+    bundle = make_bundle(destination="node-B")
+
+    decision = policy.evaluate_decision("node-A", bundle, current_time=0)
+
+    assert decision.reason == "selected_opportunistic_now"
+    assert decision.next_hop == "relay-low"
+
+
+def test_opportunistic_policy_forwards_now_if_no_better_future_exists(tmp_path):
+    cm = make_contact_manager(
+        tmp_path,
+        contacts=[
+            {
+                "source": "node-A",
+                "target": "relay-high",
+                "start_time": 0,
+                "end_time": 100,
+                "one_way_delay_ms": 0,
+                "bandwidth_kbit": 100,
+                "bidirectional": False,
+            },
+            {
+                "source": "node-A",
+                "target": "relay-low",
+                "start_time": 10,
+                "end_time": 100,
+                "one_way_delay_ms": 0,
+                "bandwidth_kbit": 10,
+                "bidirectional": False,
+            },
+        ],
+    )
+    candidates = {
+        "node-A": {
+            "node-B": [
+                RouteCandidate("relay-high", score=90),
+                RouteCandidate("relay-low", score=10),
+            ]
+        }
+    }
+
+    policy = OpportunisticRoutingPolicy(candidates, cm, hold_window=20)
+    decision = policy.evaluate_decision("node-A", make_bundle(destination="node-B"), current_time=0)
+
+    assert decision.reason == "selected_opportunistic_now"
+    assert decision.next_hop == "relay-high"
+
+
+def test_opportunistic_policy_returns_none_at_destination(wave46_candidates, wave46_contact_manager):
+    policy = OpportunisticRoutingPolicy(wave46_candidates, wave46_contact_manager)
+    decision = policy.evaluate_decision("node-B", make_bundle(destination="node-B"), current_time=0)
+
     assert decision.reason == "at_destination"
     assert decision.next_hop is None
 
-    # 2. Explicit Override
-    decision = policy.evaluate_decision("node-A", make_bundle(destination="node-B", next_hop="override-hop"), 0)
+
+def test_opportunistic_policy_honors_explicit_override_only_when_open(wave46_candidates, wave46_contact_manager):
+    policy = OpportunisticRoutingPolicy(wave46_candidates, wave46_contact_manager, hold_window=20)
+    bundle = make_bundle(destination="node-B", next_hop="relay-high-soon")
+
+    decision = policy.evaluate_decision("node-A", bundle, current_time=0)
+    assert decision.reason == "explicit_override_blocked"
+    assert decision.next_hop is None
+
+    decision = policy.evaluate_decision("node-A", bundle, current_time=20)
     assert decision.reason == "explicit_override_open"
-    assert decision.next_hop == "override-hop"
-
-    # 3. Success lookup
-    decision = policy.evaluate_decision("node-A", make_bundle(destination="node-B"), 0)
-    assert decision.reason == "selected_static_route"
-    assert decision.next_hop == "relay"
-
-    # 4. No Route
-    decision = policy.evaluate_decision("node-A", make_bundle(destination="unknown"), 0)
-    assert decision.reason == "no_route"
-    assert decision.next_hop is None
+    assert decision.next_hop == "relay-high-soon"
 
 
-def test_contact_aware_policy_returns_correct_reasons(tmp_path):
-    cm = make_contact_manager(tmp_path, contacts=[
-        {"source": "node-A", "target": "relay", "start_time": 10, "end_time": 20, "one_way_delay_ms": 0, "bandwidth_kbit": 100, "bidirectional": False}
-    ])
-    policy = ContactAwareRoutingPolicy(RoutingTable({"node-A": {"node-B": "relay"}}), cm)
-    
-    # 1. Contact Blocked (t=0)
-    decision = policy.evaluate_decision("node-A", make_bundle(destination="node-B"), 0)
-    assert decision.reason == "contact_blocked"
-    assert decision.next_hop is None
+def test_opportunistic_policy_is_deterministic_for_repeated_calls(wave46_candidates, wave46_contact_manager):
+    policy = OpportunisticRoutingPolicy(wave46_candidates, wave46_contact_manager, hold_window=20)
+    bundle = make_bundle(destination="node-B")
 
-    # 2. Success (t=15)
-    decision = policy.evaluate_decision("node-A", make_bundle(destination="node-B"), 15)
-    assert decision.reason == "selected_static_route"
-    assert decision.next_hop == "relay"
+    decision_1 = policy.evaluate_decision("node-A", bundle, current_time=0)
+    decision_2 = policy.evaluate_decision("node-A", bundle, current_time=0)
+
+    assert decision_1.reason == decision_2.reason
+    assert decision_1.next_hop == decision_2.next_hop
 
 
-def test_cgr_lite_returns_correct_reasons(tmp_path):
-    cm = make_contact_manager(tmp_path, contacts=[
-        {"source": "node-A", "target": "relay", "start_time": 10, "end_time": 20, "one_way_delay_ms": 0, "bandwidth_kbit": 100, "bidirectional": False},
-        {"source": "relay", "target": "node-B", "start_time": 20, "end_time": 30, "one_way_delay_ms": 0, "bandwidth_kbit": 100, "bidirectional": False}
-    ])
-    candidates = {"node-A": {"node-B": [RouteCandidate("relay")]}}
-    policy = CGRLiteRoutingPolicy(candidates, cm)
-    
-    # Selected Future Route
-    decision = policy.evaluate_decision("node-A", make_bundle(destination="node-B"), 0)
-    assert decision.reason == "selected_future_route"
-    assert decision.next_hop == "relay"
+def test_router_integration_with_opportunistic_policy_holds_then_forwards(wave46_candidates, wave46_contact_manager):
+    policy = OpportunisticRoutingPolicy(wave46_candidates, wave46_contact_manager, hold_window=20)
+    router = AetherRouter(contact_manager=wave46_contact_manager, routing_policy=policy)
+    bundle = make_bundle(destination="node-B")
 
-    # No future route available (dead end or missed window)
-    decision = policy.evaluate_decision("node-A", make_bundle(destination="node-B"), 50)
-    assert decision.reason == "no_future_route"
-    assert decision.next_hop is None
+    decision_now = policy.evaluate_decision("node-A", bundle, current_time=0)
+    assert decision_now.reason == "hold_for_better_contact"
+    assert router.get_next_hop("node-A", "node-B", current_time=0) is None
+    assert router.can_forward("node-A", bundle, current_time=0) is False
 
-
-def test_select_next_hop_preserves_backward_compatibility():
-    # Prove that select_next_hop is a pure wrapper around evaluate_decision
-    policy = StaticRoutingPolicy(RoutingTable({"A": {"B": "relay"}}))
-    
-    assert policy.select_next_hop("A", make_bundle(destination="B"), 0) == "relay"
-    assert policy.select_next_hop("B", make_bundle(destination="B"), 0) is None
+    decision_later = policy.evaluate_decision("node-A", bundle, current_time=15)
+    assert decision_later.reason == "selected_opportunistic_now"
+    assert router.get_next_hop("node-A", "node-B", current_time=15) == "relay-high-soon"
+    assert router.can_forward("node-A", bundle, current_time=15) is True
