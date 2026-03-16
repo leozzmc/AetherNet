@@ -5,9 +5,11 @@ import pytest
 from router.app import AetherRouter
 from router.bundle import Bundle
 from router.contact_manager import ContactManager
+from router.route_scoring import RouteCandidate, RouteScorer
 from router.routing_policies import (
     ContactAwareRoutingPolicy,
     LegacyRoutingPolicy,
+    ScoredContactAwareRoutingPolicy,
     StaticRoutingPolicy,
 )
 from routing.routing_table import RoutingTable
@@ -299,3 +301,179 @@ def test_aether_router_can_use_contact_aware_policy_explicitly(wave39_routing_ta
     bundle = make_bundle(destination="node-C")
     assert router.can_forward("node-A", bundle, current_time=15) is True
     assert router.can_forward("node-A", bundle, current_time=5) is False
+
+
+# --- Wave-40 Route Scoring Engine & Scored Routing Policy Tests ---
+
+
+def test_route_scorer_chooses_highest_score():
+    candidates = [
+        RouteCandidate("relay-1", 10),
+        RouteCandidate("relay-2", 50),
+        RouteCandidate("relay-3", 5),
+    ]
+    assert RouteScorer.choose_best(candidates) == "relay-2"
+
+
+def test_route_scorer_tie_breaks_lexically():
+    candidates = [
+        RouteCandidate("relay-B", 50),
+        RouteCandidate("relay-A", 50),
+    ]
+    assert RouteScorer.choose_best(candidates) == "relay-A"
+
+
+def test_route_scorer_returns_none_for_empty_list():
+    assert RouteScorer.choose_best([]) is None
+
+
+@pytest.fixture
+def wave40_contact_manager(tmp_path):
+    return make_contact_manager(
+        tmp_path,
+        contacts=[
+            {
+                "source": "node-A",
+                "target": "relay-slow",
+                "start_time": 0,
+                "end_time": 100,
+                "one_way_delay_ms": 10,
+                "bandwidth_kbit": 10,
+                "bidirectional": False,
+            },
+            {
+                "source": "node-A",
+                "target": "relay-fast",
+                "start_time": 50,
+                "end_time": 100,
+                "one_way_delay_ms": 10,
+                "bandwidth_kbit": 100,
+                "bidirectional": False,
+            },
+            {
+                "source": "node-A",
+                "target": "relay-tie1",
+                "start_time": 0,
+                "end_time": 100,
+                "one_way_delay_ms": 10,
+                "bandwidth_kbit": 50,
+                "bidirectional": False,
+            },
+            {
+                "source": "node-A",
+                "target": "relay-tie2",
+                "start_time": 0,
+                "end_time": 100,
+                "one_way_delay_ms": 10,
+                "bandwidth_kbit": 50,
+                "bidirectional": False,
+            },
+        ],
+    )
+
+
+@pytest.fixture
+def wave40_candidates():
+    return {
+        "node-A": {
+            "node-C": [
+                RouteCandidate("relay-slow", score=10),
+                RouteCandidate("relay-fast", score=90),
+                RouteCandidate("relay-tie1", score=50),
+                RouteCandidate("relay-tie2", score=50),
+            ]
+        }
+    }
+
+
+def test_scored_policy_filters_closed_contacts_and_picks_best(wave40_candidates, wave40_contact_manager):
+    policy = ScoredContactAwareRoutingPolicy(wave40_candidates, wave40_contact_manager)
+    bundle = make_bundle(destination="node-C")
+
+    assert policy.select_next_hop("node-A", bundle, current_time=20) == "relay-tie1"
+    assert policy.select_next_hop("node-A", bundle, current_time=60) == "relay-fast"
+
+
+def test_scored_policy_returns_none_if_no_candidates_available(wave40_contact_manager):
+    policy = ScoredContactAwareRoutingPolicy({}, wave40_contact_manager)
+
+    assert policy.select_next_hop("node-A", make_bundle(destination="node-C"), current_time=20) is None
+
+
+def test_scored_policy_returns_none_when_all_candidates_are_closed(tmp_path):
+    contact_manager = make_contact_manager(
+        tmp_path,
+        contacts=[
+            {
+                "source": "node-A",
+                "target": "relay-closed-1",
+                "start_time": 50,
+                "end_time": 60,
+                "one_way_delay_ms": 10,
+                "bandwidth_kbit": 50,
+                "bidirectional": False,
+            },
+            {
+                "source": "node-A",
+                "target": "relay-closed-2",
+                "start_time": 50,
+                "end_time": 60,
+                "one_way_delay_ms": 10,
+                "bandwidth_kbit": 50,
+                "bidirectional": False,
+            },
+        ],
+    )
+
+    candidates = {
+        "node-A": {
+            "node-C": [
+                RouteCandidate("relay-closed-1", score=10),
+                RouteCandidate("relay-closed-2", score=20),
+            ]
+        }
+    }
+
+    policy = ScoredContactAwareRoutingPolicy(candidates, contact_manager)
+
+    assert policy.select_next_hop("node-A", make_bundle(destination="node-C"), current_time=10) is None
+
+
+def test_scored_policy_returns_none_at_destination(wave40_candidates, wave40_contact_manager):
+    policy = ScoredContactAwareRoutingPolicy(wave40_candidates, wave40_contact_manager)
+
+    assert policy.select_next_hop("node-C", make_bundle(destination="node-C"), current_time=60) is None
+
+
+def test_scored_policy_honors_explicit_bundle_override_only_if_open(wave40_candidates, wave40_contact_manager):
+    policy = ScoredContactAwareRoutingPolicy(wave40_candidates, wave40_contact_manager)
+    bundle = make_bundle(destination="node-C", next_hop="relay-fast")
+
+    assert policy.select_next_hop("node-A", bundle, current_time=20) is None
+    assert policy.select_next_hop("node-A", bundle, current_time=60) == "relay-fast"
+
+
+def test_scored_policy_is_deterministic_for_same_time(wave40_candidates, wave40_contact_manager):
+    policy = ScoredContactAwareRoutingPolicy(wave40_candidates, wave40_contact_manager)
+    bundle = make_bundle(destination="node-C")
+
+    result_1 = policy.select_next_hop("node-A", bundle, current_time=20)
+    result_2 = policy.select_next_hop("node-A", bundle, current_time=20)
+
+    assert result_1 == "relay-tie1"
+    assert result_2 == "relay-tie1"
+
+
+def test_aether_router_can_use_scored_policy_explicitly(wave40_candidates, wave40_contact_manager):
+    policy = ScoredContactAwareRoutingPolicy(wave40_candidates, wave40_contact_manager)
+    router = AetherRouter(
+        contact_manager=wave40_contact_manager,
+        routing_policy=policy,
+    )
+
+    assert router.get_next_hop("node-A", "node-C", current_time=20) == "relay-tie1"
+    assert router.get_next_hop("node-A", "node-C", current_time=60) == "relay-fast"
+
+    bundle = make_bundle(destination="node-C")
+    assert router.can_forward("node-A", bundle, current_time=20) is True
+    assert router.can_forward("node-A", bundle, current_time=60) is True

@@ -1,10 +1,11 @@
 from __future__ import annotations
 
-from typing import Optional
+from typing import Dict, List, Optional
 
 from router.bundle import Bundle
 from router.contact_manager import ContactManager
 from router.policies import next_hop_for
+from router.route_scoring import RouteCandidate, RouteScorer
 from router.routing_policy import RoutingPolicy
 from routing.routing_table import RoutingTable
 
@@ -36,15 +37,12 @@ class StaticRoutingPolicy:
         bundle: Bundle,
         current_time: int,
     ) -> Optional[str]:
-        # 1. Arrival semantics: Do not forward if we are already at the destination
         if current_node == bundle.destination:
             return None
 
-        # 2. Override semantics: Explicit pinned next_hop takes absolute precedence
         if bundle.next_hop:
             return bundle.next_hop
 
-        # 3. Table lookup semantics: Returns None implicitly if route/source is unknown
         return self.routing_table.get_next_hop(current_node, bundle.destination)
 
 
@@ -66,24 +64,68 @@ class ContactAwareRoutingPolicy:
         bundle: Bundle,
         current_time: int,
     ) -> Optional[str]:
-        # 1. Arrival semantics: Do not forward if we are already at the destination
         if current_node == bundle.destination:
             return None
 
-        # 2. Explicit pinned next_hop takes precedence, BUT must be contact-aware
         if bundle.next_hop:
             if self.contact_manager.is_forwarding_allowed(current_node, bundle.next_hop, current_time):
                 return bundle.next_hop
             return None
 
-        # 3. Resolve the theoretical next hop from the static routing table
         candidate_hop = self.routing_table.get_next_hop(current_node, bundle.destination)
         if not candidate_hop:
-            return None  # No route exists
+            return None
 
-        # 4. Gating: Only return the candidate if the contact is open right now
         if self.contact_manager.is_forwarding_allowed(current_node, candidate_hop, current_time):
             return candidate_hop
 
-        # 5. Route exists, but contact is currently closed
         return None
+
+
+class ScoredContactAwareRoutingPolicy:
+    """
+    Wave-40: Multi-candidate routing policy with deterministic scoring.
+    Evaluates multiple potential next hops, filters out those without an active
+    contact window, and selects the best remaining hop based on configured scores.
+    """
+
+    def __init__(
+        self, 
+        candidate_routes: Dict[str, Dict[str, List[RouteCandidate]]], 
+        contact_manager: ContactManager
+    ):
+        # Format: source -> { destination -> [RouteCandidate(next_hop, score), ...] }
+        self.candidate_routes = candidate_routes
+        self.contact_manager = contact_manager
+
+    def select_next_hop(
+        self,
+        current_node: str,
+        bundle: Bundle,
+        current_time: int,
+    ) -> Optional[str]:
+        # 1. Arrival semantics
+        if current_node == bundle.destination:
+            return None
+
+        # 2. Explicit pinned next_hop takes precedence if contact is open
+        if bundle.next_hop:
+            if self.contact_manager.is_forwarding_allowed(current_node, bundle.next_hop, current_time):
+                return bundle.next_hop
+            return None
+
+        # 3. Retrieve candidates for this specific (source, destination) pair
+        dest_map = self.candidate_routes.get(current_node, {})
+        candidates = dest_map.get(bundle.destination, [])
+        
+        if not candidates:
+            return None
+
+        # 4. Filter out candidates whose contact window is currently closed
+        valid_candidates = []
+        for candidate in candidates:
+            if self.contact_manager.is_forwarding_allowed(current_node, candidate.next_hop, current_time):
+                valid_candidates.append(candidate)
+
+        # 5. Score and select the best candidate deterministically
+        return RouteScorer.choose_best(valid_candidates)
