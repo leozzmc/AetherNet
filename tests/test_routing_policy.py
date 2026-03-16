@@ -1,9 +1,15 @@
 import json
 
+import pytest
+
 from router.app import AetherRouter
 from router.bundle import Bundle
 from router.contact_manager import ContactManager
-from router.routing_policies import LegacyRoutingPolicy, StaticRoutingPolicy
+from router.routing_policies import (
+    ContactAwareRoutingPolicy,
+    LegacyRoutingPolicy,
+    StaticRoutingPolicy,
+)
 from routing.routing_table import RoutingTable
 
 
@@ -27,7 +33,7 @@ def make_contact_manager(tmp_path, contacts=None):
     plan_path.write_text(
         json.dumps(
             {
-                "simulation_duration_sec": 10,
+                "simulation_duration_sec": 100,
                 "contacts": contacts or [],
             }
         ),
@@ -203,6 +209,93 @@ def test_router_can_forward_returns_false_at_destination_even_if_contact_exists(
     )
     bundle = make_bundle(destination="ground-station")
 
-    # Even though a contact exists from ground-station -> relay,
-    # the policy must return None because the bundle is already at destination.
     assert router.can_forward("ground-station", bundle, current_time=5) is False
+
+
+# --- Wave-39 Contact-Aware Routing Policy Tests ---
+
+
+@pytest.fixture
+def wave39_routing_table():
+    return RoutingTable({"node-A": {"node-C": "node-B"}})
+
+
+@pytest.fixture
+def wave39_contact_manager(tmp_path):
+    return make_contact_manager(
+        tmp_path,
+        contacts=[
+            {
+                "source": "node-A",
+                "target": "node-B",
+                "start_time": 10,
+                "end_time": 20,
+                "one_way_delay_ms": 10,
+                "bandwidth_kbit": 100,
+                "bidirectional": False,
+            }
+        ],
+    )
+
+
+def test_contact_aware_policy_returns_hop_when_open(wave39_routing_table, wave39_contact_manager):
+    policy = ContactAwareRoutingPolicy(wave39_routing_table, wave39_contact_manager)
+    bundle = make_bundle(destination="node-C")
+
+    assert policy.select_next_hop("node-A", bundle, current_time=15) == "node-B"
+
+
+def test_contact_aware_policy_returns_none_when_closed(wave39_routing_table, wave39_contact_manager):
+    policy = ContactAwareRoutingPolicy(wave39_routing_table, wave39_contact_manager)
+    bundle = make_bundle(destination="node-C")
+
+    assert policy.select_next_hop("node-A", bundle, current_time=5) is None
+
+
+def test_contact_aware_policy_returns_none_if_no_route(wave39_routing_table, wave39_contact_manager):
+    policy = ContactAwareRoutingPolicy(wave39_routing_table, wave39_contact_manager)
+    bundle = make_bundle(destination="unknown-dest")
+
+    assert policy.select_next_hop("node-A", bundle, current_time=15) is None
+
+
+def test_contact_aware_policy_returns_none_at_destination(wave39_routing_table, wave39_contact_manager):
+    policy = ContactAwareRoutingPolicy(wave39_routing_table, wave39_contact_manager)
+    bundle = make_bundle(destination="node-A")
+
+    assert policy.select_next_hop("node-A", bundle, current_time=15) is None
+
+
+def test_contact_aware_policy_honors_explicit_override_only_if_open(wave39_routing_table, wave39_contact_manager):
+    policy = ContactAwareRoutingPolicy(wave39_routing_table, wave39_contact_manager)
+    bundle = make_bundle(destination="node-C", next_hop="node-B")
+
+    assert policy.select_next_hop("node-A", bundle, current_time=15) == "node-B"
+    assert policy.select_next_hop("node-A", bundle, current_time=5) is None
+
+
+def test_contact_aware_policy_is_deterministic_for_same_time(wave39_routing_table, wave39_contact_manager):
+    policy = ContactAwareRoutingPolicy(wave39_routing_table, wave39_contact_manager)
+    bundle = make_bundle(destination="node-C")
+
+    result_1 = policy.select_next_hop("node-A", bundle, current_time=15)
+    result_2 = policy.select_next_hop("node-A", bundle, current_time=15)
+
+    assert result_1 == "node-B"
+    assert result_2 == "node-B"
+
+
+def test_aether_router_can_use_contact_aware_policy_explicitly(wave39_routing_table, wave39_contact_manager):
+    policy = ContactAwareRoutingPolicy(wave39_routing_table, wave39_contact_manager)
+    router = AetherRouter(
+        contact_manager=wave39_contact_manager,
+        routing_table=wave39_routing_table,
+        routing_policy=policy,
+    )
+
+    assert router.get_next_hop("node-A", "node-C", current_time=15) == "node-B"
+    assert router.get_next_hop("node-A", "node-C", current_time=5) is None
+
+    bundle = make_bundle(destination="node-C")
+    assert router.can_forward("node-A", bundle, current_time=15) is True
+    assert router.can_forward("node-A", bundle, current_time=5) is False
