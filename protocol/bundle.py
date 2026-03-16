@@ -39,6 +39,8 @@ class BundleProtocolV1:
             "original_bundle_id",
             "fragment_index",
             "total_fragments",
+            "custody_requested", # Wave-29
+            "custody_holder"     # Wave-29
         }
 
         filtered = {k: v for k, v in parsed.items() if k in allowed_fields}

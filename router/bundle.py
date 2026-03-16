@@ -42,6 +42,10 @@ class Bundle:
     fragment_index: Optional[int] = None
     total_fragments: Optional[int] = None
 
+    # Wave-29 additive custody transfer metadata
+    custody_requested: bool = False
+    custody_holder: Optional[str] = None
+
     def __post_init__(self) -> None:
         if not self.id.strip():
             raise ValueError("Bundle id must not be empty.")
