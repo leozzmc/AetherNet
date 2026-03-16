@@ -179,10 +179,92 @@ class CGRLiteRoutingPolicy:
                     best_candidate = next_hop
 
         if best_candidate is None:
-            # If all candidates lacked a viable future path
             return RoutingDecision(next_hop=None, reason="no_future_route")
 
         return RoutingDecision(next_hop=best_candidate, reason="selected_future_route")
+
+    def select_next_hop(self, current_node: str, bundle: Bundle, current_time: int) -> Optional[str]:
+        return self.evaluate_decision(current_node, bundle, current_time).next_hop
+
+
+class OpportunisticRoutingPolicy:
+    """
+    Wave-46: Bounded Opportunistic Hold-vs-Forward Baseline.
+    Evaluates currently open candidate contacts versus candidates opening in the 
+    near future (hold_window). If a significantly better candidate opens soon, 
+    the policy elects to hold the bundle rather than forward it immediately.
+    """
+
+    def __init__(
+        self, 
+        candidate_routes: Dict[str, Dict[str, List[RouteCandidate]]], 
+        contact_manager: ContactManager,
+        hold_window: int = 20
+    ):
+        self.candidate_routes = candidate_routes
+        self.contact_manager = contact_manager
+        self.hold_window = hold_window
+
+    def _get_candidate_by_name(self, candidates: List[RouteCandidate], name: str) -> Optional[RouteCandidate]:
+        for c in candidates:
+            if c.next_hop == name:
+                return c
+        return None
+
+    def evaluate_decision(self, current_node: str, bundle: Bundle, current_time: int) -> RoutingDecision:
+        if current_node == bundle.destination:
+            return RoutingDecision(next_hop=None, reason="at_destination")
+
+        if bundle.next_hop:
+            if self.contact_manager.is_forwarding_allowed(current_node, bundle.next_hop, current_time):
+                return RoutingDecision(next_hop=bundle.next_hop, reason="explicit_override_open")
+            return RoutingDecision(next_hop=None, reason="explicit_override_blocked")
+
+        candidates = self.candidate_routes.get(current_node, {}).get(bundle.destination, [])
+        if not candidates:
+            return RoutingDecision(next_hop=None, reason="no_route")
+
+        open_candidates = []
+        future_candidates = []
+        window_end = current_time + self.hold_window
+
+        for c in candidates:
+            if self.contact_manager.is_forwarding_allowed(current_node, c.next_hop, current_time):
+                open_candidates.append(c)
+            else:
+                # Check if it opens within the bounded hold window
+                opens_soon = False
+                for contact in self.contact_manager.contacts:
+                    if contact.allows(current_node, c.next_hop):
+                        if current_time < contact.start_time <= window_end:
+                            opens_soon = True
+                            break
+                if opens_soon:
+                    future_candidates.append(c)
+
+        best_open_name = RouteScorer.choose_best(open_candidates)
+        best_future_name = RouteScorer.choose_best(future_candidates)
+
+        if not best_open_name and not best_future_name:
+            return RoutingDecision(next_hop=None, reason="no_opportunity")
+
+        if not best_open_name and best_future_name:
+            return RoutingDecision(next_hop=None, reason="hold_for_better_contact")
+
+        # Both exist, we must compare them
+        if best_open_name and best_future_name:
+            best_open_obj = self._get_candidate_by_name(candidates, best_open_name)
+            best_future_obj = self._get_candidate_by_name(candidates, best_future_name)
+            
+            assert best_open_obj is not None
+            assert best_future_obj is not None
+
+            # If the future candidate is strictly better (higher score), we hold.
+            if best_future_obj.score > best_open_obj.score:
+                return RoutingDecision(next_hop=None, reason="hold_for_better_contact")
+
+        # Either there are no future candidates, or the current one is just as good/better
+        return RoutingDecision(next_hop=best_open_name, reason="selected_opportunistic_now")
 
     def select_next_hop(self, current_node: str, bundle: Bundle, current_time: int) -> Optional[str]:
         return self.evaluate_decision(current_node, bundle, current_time).next_hop
