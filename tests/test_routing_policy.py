@@ -4,9 +4,11 @@ import pytest
 
 from router.app import AetherRouter
 from router.bundle import Bundle
+from router.contact_graph import ContactForecast
 from router.contact_manager import ContactManager
 from router.route_scoring import RouteCandidate, RouteScorer
 from router.routing_policies import (
+    CGRLiteRoutingPolicy,
     ContactAwareRoutingPolicy,
     LegacyRoutingPolicy,
     ScoredContactAwareRoutingPolicy,
@@ -35,7 +37,7 @@ def make_contact_manager(tmp_path, contacts=None):
     plan_path.write_text(
         json.dumps(
             {
-                "simulation_duration_sec": 100,
+                "simulation_duration_sec": 1000,
                 "contacts": contacts or [],
             }
         ),
@@ -477,3 +479,321 @@ def test_aether_router_can_use_scored_policy_explicitly(wave40_candidates, wave4
     bundle = make_bundle(destination="node-C")
     assert router.can_forward("node-A", bundle, current_time=20) is True
     assert router.can_forward("node-A", bundle, current_time=60) is True
+
+
+# --- Wave-41 Contact Forecast + CGR-lite Tests ---
+
+
+def test_contact_forecast_finds_currently_open_contact(tmp_path):
+    cm = make_contact_manager(
+        tmp_path,
+        contacts=[
+            {
+                "source": "A",
+                "target": "B",
+                "start_time": 10,
+                "end_time": 20,
+                "one_way_delay_ms": 1000,
+                "bandwidth_kbit": 100,
+                "bidirectional": False,
+            }
+        ],
+    )
+    forecast = ContactForecast(cm)
+
+    opp = forecast.find_next_contact("A", "B", after_time=15)
+
+    assert opp is not None
+    assert opp.start_time == 15
+    assert opp.estimated_arrival_time == 16
+
+
+def test_contact_forecast_supports_bidirectional_contacts(tmp_path):
+    cm = make_contact_manager(
+        tmp_path,
+        contacts=[
+            {
+                "source": "A",
+                "target": "B",
+                "start_time": 10,
+                "end_time": 20,
+                "one_way_delay_ms": 0,
+                "bandwidth_kbit": 100,
+                "bidirectional": True,
+            }
+        ],
+    )
+    forecast = ContactForecast(cm)
+
+    opp = forecast.find_next_contact("B", "A", after_time=12)
+
+    assert opp is not None
+    assert opp.start_time == 12
+    assert opp.estimated_arrival_time == 12
+
+
+@pytest.fixture
+def wave41_contact_manager(tmp_path):
+    return make_contact_manager(
+        tmp_path,
+        contacts=[
+            # direct path opens late
+            {
+                "source": "node-A",
+                "target": "node-C",
+                "start_time": 80,
+                "end_time": 100,
+                "one_way_delay_ms": 1000,
+                "bandwidth_kbit": 100,
+                "bidirectional": False,
+            },
+            # relay-1 path opens early but finishes late overall
+            {
+                "source": "node-A",
+                "target": "relay-1",
+                "start_time": 10,
+                "end_time": 20,
+                "one_way_delay_ms": 1000,
+                "bandwidth_kbit": 100,
+                "bidirectional": False,
+            },
+            {
+                "source": "relay-1",
+                "target": "node-C",
+                "start_time": 90,
+                "end_time": 100,
+                "one_way_delay_ms": 1000,
+                "bandwidth_kbit": 100,
+                "bidirectional": False,
+            },
+            # relay-2 path yields earliest final arrival
+            {
+                "source": "node-A",
+                "target": "relay-2",
+                "start_time": 30,
+                "end_time": 40,
+                "one_way_delay_ms": 1000,
+                "bandwidth_kbit": 100,
+                "bidirectional": False,
+            },
+            {
+                "source": "relay-2",
+                "target": "node-C",
+                "start_time": 45,
+                "end_time": 60,
+                "one_way_delay_ms": 1000,
+                "bandwidth_kbit": 100,
+                "bidirectional": False,
+            },
+            # dead-end candidate: first hop exists but no second hop
+            {
+                "source": "node-A",
+                "target": "relay-dead",
+                "start_time": 5,
+                "end_time": 100,
+                "one_way_delay_ms": 1000,
+                "bandwidth_kbit": 100,
+                "bidirectional": False,
+            },
+        ],
+    )
+
+
+@pytest.fixture
+def wave41_candidates():
+    return {
+        "node-A": {
+            "node-C": [
+                RouteCandidate("node-C", score=0),
+                RouteCandidate("relay-1", score=0),
+                RouteCandidate("relay-2", score=0),
+                RouteCandidate("relay-dead", score=0),
+            ]
+        }
+    }
+
+
+def test_cgr_lite_selects_fastest_overall_path_even_if_closed_now(wave41_candidates, wave41_contact_manager):
+    policy = CGRLiteRoutingPolicy(wave41_candidates, wave41_contact_manager)
+    bundle = make_bundle(destination="node-C")
+
+    assert policy.select_next_hop("node-A", bundle, current_time=0) == "relay-2"
+
+
+def test_cgr_lite_prefers_direct_candidate_when_it_arrives_earlier(tmp_path):
+    cm = make_contact_manager(
+        tmp_path,
+        contacts=[
+            {
+                "source": "S",
+                "target": "D",
+                "start_time": 20,
+                "end_time": 30,
+                "one_way_delay_ms": 1000,
+                "bandwidth_kbit": 100,
+                "bidirectional": False,
+            },
+            {
+                "source": "S",
+                "target": "R",
+                "start_time": 10,
+                "end_time": 20,
+                "one_way_delay_ms": 1000,
+                "bandwidth_kbit": 100,
+                "bidirectional": False,
+            },
+            {
+                "source": "R",
+                "target": "D",
+                "start_time": 50,
+                "end_time": 60,
+                "one_way_delay_ms": 1000,
+                "bandwidth_kbit": 100,
+                "bidirectional": False,
+            },
+        ],
+    )
+    candidates = {"S": {"D": [RouteCandidate("D"), RouteCandidate("R")]}}
+    policy = CGRLiteRoutingPolicy(candidates, cm)
+
+    assert policy.select_next_hop("S", make_bundle(destination="D"), current_time=0) == "D"
+
+
+def test_cgr_lite_ignores_candidates_with_no_future_first_hop_contact(tmp_path):
+    cm = make_contact_manager(
+        tmp_path,
+        contacts=[
+            {
+                "source": "S",
+                "target": "good-relay",
+                "start_time": 10,
+                "end_time": 20,
+                "one_way_delay_ms": 0,
+                "bandwidth_kbit": 100,
+                "bidirectional": False,
+            },
+            {
+                "source": "good-relay",
+                "target": "D",
+                "start_time": 30,
+                "end_time": 40,
+                "one_way_delay_ms": 0,
+                "bandwidth_kbit": 100,
+                "bidirectional": False,
+            },
+        ],
+    )
+    candidates = {
+        "S": {
+            "D": [
+                RouteCandidate("missing-relay"),
+                RouteCandidate("good-relay"),
+            ]
+        }
+    }
+    policy = CGRLiteRoutingPolicy(candidates, cm)
+
+    assert policy.select_next_hop("S", make_bundle(destination="D"), current_time=0) == "good-relay"
+
+
+def test_cgr_lite_ignores_candidates_with_no_future_second_hop_contact(wave41_candidates, wave41_contact_manager):
+    policy = CGRLiteRoutingPolicy(wave41_candidates, wave41_contact_manager)
+    bundle = make_bundle(destination="node-C")
+
+    # relay-dead has a first hop but no future path to destination, so it must never win
+    assert policy.select_next_hop("node-A", bundle, current_time=0) != "relay-dead"
+
+
+def test_cgr_lite_returns_direct_path_when_other_relays_are_no_longer_viable(wave41_candidates, wave41_contact_manager):
+    policy = CGRLiteRoutingPolicy(wave41_candidates, wave41_contact_manager)
+    bundle = make_bundle(destination="node-C")
+
+    # By t=75, relay paths are no longer reachable via their first hops,
+    # but the direct contact at 80..100 is still a viable future path.
+    assert policy.select_next_hop("node-A", bundle, current_time=75) == "node-C"
+
+
+def test_cgr_lite_lexical_tie_break(tmp_path):
+    cm = make_contact_manager(
+        tmp_path,
+        contacts=[
+            {
+                "source": "S",
+                "target": "B",
+                "start_time": 10,
+                "end_time": 20,
+                "one_way_delay_ms": 0,
+                "bandwidth_kbit": 10,
+                "bidirectional": False,
+            },
+            {
+                "source": "S",
+                "target": "A",
+                "start_time": 10,
+                "end_time": 20,
+                "one_way_delay_ms": 0,
+                "bandwidth_kbit": 10,
+                "bidirectional": False,
+            },
+            {
+                "source": "B",
+                "target": "D",
+                "start_time": 30,
+                "end_time": 40,
+                "one_way_delay_ms": 0,
+                "bandwidth_kbit": 10,
+                "bidirectional": False,
+            },
+            {
+                "source": "A",
+                "target": "D",
+                "start_time": 30,
+                "end_time": 40,
+                "one_way_delay_ms": 0,
+                "bandwidth_kbit": 10,
+                "bidirectional": False,
+            },
+        ],
+    )
+    candidates = {"S": {"D": [RouteCandidate("B"), RouteCandidate("A")]}}
+    policy = CGRLiteRoutingPolicy(candidates, cm)
+
+    assert policy.select_next_hop("S", make_bundle(destination="D"), current_time=0) == "A"
+
+
+def test_cgr_lite_returns_none_at_destination(wave41_candidates, wave41_contact_manager):
+    policy = CGRLiteRoutingPolicy(wave41_candidates, wave41_contact_manager)
+
+    assert policy.select_next_hop("node-C", make_bundle(destination="node-C"), current_time=0) is None
+
+
+def test_cgr_lite_explicit_override_only_works_when_contact_is_open(wave41_candidates, wave41_contact_manager):
+    policy = CGRLiteRoutingPolicy(wave41_candidates, wave41_contact_manager)
+    bundle = make_bundle(destination="node-C", next_hop="relay-2")
+
+    assert policy.select_next_hop("node-A", bundle, current_time=0) is None
+    assert policy.select_next_hop("node-A", bundle, current_time=30) == "relay-2"
+
+
+def test_cgr_lite_is_deterministic_for_same_time(wave41_candidates, wave41_contact_manager):
+    policy = CGRLiteRoutingPolicy(wave41_candidates, wave41_contact_manager)
+    bundle = make_bundle(destination="node-C")
+
+    result_1 = policy.select_next_hop("node-A", bundle, current_time=0)
+    result_2 = policy.select_next_hop("node-A", bundle, current_time=0)
+
+    assert result_1 == "relay-2"
+    assert result_2 == "relay-2"
+
+
+def test_router_integration_with_cgr_lite_separates_preference_from_forwarding(
+    wave41_candidates,
+    wave41_contact_manager,
+):
+    policy = CGRLiteRoutingPolicy(wave41_candidates, wave41_contact_manager)
+    router = AetherRouter(contact_manager=wave41_contact_manager, routing_policy=policy)
+    bundle = make_bundle(destination="node-C")
+
+    assert router.get_next_hop("node-A", "node-C", current_time=0) == "relay-2"
+    assert router.can_forward("node-A", bundle, current_time=0) is False
+    assert router.can_forward("node-A", bundle, current_time=30) is True
