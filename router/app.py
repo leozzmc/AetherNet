@@ -1,26 +1,34 @@
 from __future__ import annotations
 
-from typing import Optional
+from typing import List, Optional
 
-from router.contact_manager import ContactManager
+from metrics.congestion_metrics import CongestionMetrics
 from router.bundle import Bundle
-from router.routing_policy import RoutingPolicy
+from router.contact_manager import ContactManager
 from router.routing_policies import LegacyRoutingPolicy, StaticRoutingPolicy
+from router.routing_policy import RoutingPolicy
+from router.store_capacity import StoreCapacityController
 from routing.routing_table import RoutingTable
 
 
 class AetherRouter:
-    """Minimal coordinator for routing-policy and contact-plan checks."""
+    """Minimal coordinator for routing-policy, contact-plan checks, and node storage."""
 
     def __init__(
         self,
         contact_manager: ContactManager,
         routing_table: Optional[RoutingTable] = None,
         routing_policy: Optional[RoutingPolicy] = None,
+        store_capacity_bytes: Optional[int] = None,
     ):
         self.cm = contact_manager
         self.routing_table = routing_table
         self.routing_policy = routing_policy or self._default_policy(routing_table)
+        
+        # Wave-43: Congestion Control & Node Storage
+        self.store: List[Bundle] = []
+        self.capacity_controller = StoreCapacityController(store_capacity_bytes)
+        self.congestion_metrics = CongestionMetrics(store_capacity_bytes)
 
     @staticmethod
     def _default_policy(routing_table: Optional[RoutingTable]) -> RoutingPolicy:
@@ -33,6 +41,21 @@ class AetherRouter:
             return StaticRoutingPolicy(routing_table)
         return LegacyRoutingPolicy()
 
+    def store_bundle(self, bundle: Bundle) -> List[Bundle]:
+        """
+        Wave-43: Safely enqueue a bundle into the node's store, enforcing finite 
+        capacity and tracking congestion metrics. Returns any bundles dropped.
+        """
+        self.store.append(bundle)
+        
+        dropped = self.capacity_controller.enforce_capacity(self.store)
+        
+        self.congestion_metrics.record_drops(len(dropped))
+        current_bytes = sum(b.size_bytes for b in self.store)
+        self.congestion_metrics.update_store_bytes(current_bytes)
+        
+        return dropped
+
     def get_next_hop(
         self,
         current_node: str,
@@ -41,10 +64,6 @@ class AetherRouter:
     ) -> str | None:
         """
         Preferred routing lookup entrypoint.
-
-        Backward compatibility:
-        - older callers may omit current_time and will default to 0
-        - time-aware policies may use current_time when provided
         """
         bundle = Bundle(
             id="__routing_lookup__",
@@ -57,6 +76,7 @@ class AetherRouter:
             size_bytes=0,
             payload_ref="routing-lookup",
         )
+        # Assuming RoutingPolicy has select_next_hop (wrapper for evaluate_decision)
         return self.routing_policy.select_next_hop(
             current_node=current_node,
             bundle=bundle,
@@ -69,9 +89,7 @@ class AetherRouter:
         destination: str,
         current_time: int = 0,
     ) -> str | None:
-        """
-        Backward-compatible alias retained for older code/tests.
-        """
+        """Backward-compatible alias retained for older code/tests."""
         return self.get_next_hop(current_node, destination, current_time=current_time)
 
     def can_forward(self, current_node: str, bundle: Bundle, current_time: int) -> bool:
