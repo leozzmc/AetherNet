@@ -797,3 +797,71 @@ def test_router_integration_with_cgr_lite_separates_preference_from_forwarding(
     assert router.get_next_hop("node-A", "node-C", current_time=0) == "relay-2"
     assert router.can_forward("node-A", bundle, current_time=0) is False
     assert router.can_forward("node-A", bundle, current_time=30) is True
+    
+    
+def test_static_policy_returns_correct_reasons():
+    policy = StaticRoutingPolicy(RoutingTable({"node-A": {"node-B": "relay"}}))
+    
+    # 1. At destination
+    decision = policy.evaluate_decision("node-B", make_bundle(destination="node-B"), 0)
+    assert decision.reason == "at_destination"
+    assert decision.next_hop is None
+
+    # 2. Explicit Override
+    decision = policy.evaluate_decision("node-A", make_bundle(destination="node-B", next_hop="override-hop"), 0)
+    assert decision.reason == "explicit_override_open"
+    assert decision.next_hop == "override-hop"
+
+    # 3. Success lookup
+    decision = policy.evaluate_decision("node-A", make_bundle(destination="node-B"), 0)
+    assert decision.reason == "selected_static_route"
+    assert decision.next_hop == "relay"
+
+    # 4. No Route
+    decision = policy.evaluate_decision("node-A", make_bundle(destination="unknown"), 0)
+    assert decision.reason == "no_route"
+    assert decision.next_hop is None
+
+
+def test_contact_aware_policy_returns_correct_reasons(tmp_path):
+    cm = make_contact_manager(tmp_path, contacts=[
+        {"source": "node-A", "target": "relay", "start_time": 10, "end_time": 20, "one_way_delay_ms": 0, "bandwidth_kbit": 100, "bidirectional": False}
+    ])
+    policy = ContactAwareRoutingPolicy(RoutingTable({"node-A": {"node-B": "relay"}}), cm)
+    
+    # 1. Contact Blocked (t=0)
+    decision = policy.evaluate_decision("node-A", make_bundle(destination="node-B"), 0)
+    assert decision.reason == "contact_blocked"
+    assert decision.next_hop is None
+
+    # 2. Success (t=15)
+    decision = policy.evaluate_decision("node-A", make_bundle(destination="node-B"), 15)
+    assert decision.reason == "selected_static_route"
+    assert decision.next_hop == "relay"
+
+
+def test_cgr_lite_returns_correct_reasons(tmp_path):
+    cm = make_contact_manager(tmp_path, contacts=[
+        {"source": "node-A", "target": "relay", "start_time": 10, "end_time": 20, "one_way_delay_ms": 0, "bandwidth_kbit": 100, "bidirectional": False},
+        {"source": "relay", "target": "node-B", "start_time": 20, "end_time": 30, "one_way_delay_ms": 0, "bandwidth_kbit": 100, "bidirectional": False}
+    ])
+    candidates = {"node-A": {"node-B": [RouteCandidate("relay")]}}
+    policy = CGRLiteRoutingPolicy(candidates, cm)
+    
+    # Selected Future Route
+    decision = policy.evaluate_decision("node-A", make_bundle(destination="node-B"), 0)
+    assert decision.reason == "selected_future_route"
+    assert decision.next_hop == "relay"
+
+    # No future route available (dead end or missed window)
+    decision = policy.evaluate_decision("node-A", make_bundle(destination="node-B"), 50)
+    assert decision.reason == "no_future_route"
+    assert decision.next_hop is None
+
+
+def test_select_next_hop_preserves_backward_compatibility():
+    # Prove that select_next_hop is a pure wrapper around evaluate_decision
+    policy = StaticRoutingPolicy(RoutingTable({"A": {"B": "relay"}}))
+    
+    assert policy.select_next_hop("A", make_bundle(destination="B"), 0) == "relay"
+    assert policy.select_next_hop("B", make_bundle(destination="B"), 0) is None
