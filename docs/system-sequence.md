@@ -1,6 +1,9 @@
 
 # AetherNet System Sequence
 
+
+
+
 ## End-to-End Bundle Lifecycle
 
 This document describes the **complete lifecycle of a bundle** inside the AetherNet system.
@@ -104,6 +107,10 @@ sequenceDiagram
     GroundStation->>Metrics: record delivery
 
     Metrics->>Metrics: update reports
+
+    Metrics->>Report: export experiment artifacts
+   
+    Report->>Artifacts: write JSON files
 ````
 
 ---
@@ -391,5 +398,44 @@ deep-space DTN protocols
 contact-aware routing
 interplanetary communications
 ```
+
+
+
+---
+
+# system-sequence.md 修改建議
+
+你的文件其實 **很好**，只需要補兩個地方。
+
+### 修改 1
+
+在最前面加：
+
+```
+Phase-2.2 Extension
+```
+
+新增 section：
+
+```
+# Phase-2.2 Artifact Export
+
+After simulation completion:
+
+Metrics → Export Artifacts → JSON Output
+
+Artifacts enable offline analysis using
+Jupyter Notebook or Python scripts.
+```
+
+
+# Phase-2.2 Artifact Export
+
+After simulation completion:
+
+Metrics → Export Artifacts → JSON Output
+
+Artifacts enable offline analysis using
+Jupyter Notebook or Python scripts.
 
 ---

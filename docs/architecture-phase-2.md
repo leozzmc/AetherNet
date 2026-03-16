@@ -48,6 +48,13 @@ flowchart LR
         TIMELINE[Bundle Timelines]
     end
 
+    
+    subgraph Artifact Layer
+        EXPORT[Artifact Exporter]
+        JSON[Experiment JSON]
+    end
+
+
     SCEN --> RUN
     RUN --> SIM
 
@@ -67,6 +74,9 @@ flowchart LR
     SIM --> MET
     MET --> REP
     MET --> TIMELINE
+
+    REP --> EXPORT
+    EXPORT --> JSON
 ```
 
 ---
@@ -83,7 +93,7 @@ AetherNet follows a **layered architecture**, where each layer handles a specifi
 | Transport     | fragmentation and reassembly                      |
 | Storage       | bundle persistence and queueing                   |
 | Observability | metrics, reports, experiment outputs              |
-
+|Artifact |exportation|
 ---
 
 # 3. Core Modules
@@ -342,6 +352,10 @@ This layer provides experiment outputs.
 
 ---
 
+# Artifact Layer
+
+
+
 ## Network Metrics
 
 File:
@@ -542,3 +556,4 @@ experiment reporting
 The platform is now positioned as a **research-grade DTN simulation environment** capable of supporting deeper exploration of space networking architectures.
 
 ---
+
