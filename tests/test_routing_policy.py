@@ -14,9 +14,10 @@ from router.routing_policies import (
     OpportunisticRoutingPolicy,
     ScoredContactAwareRoutingPolicy,
     StaticRoutingPolicy,
+    MultiPathRoutingPolicy,
 )
 from routing.routing_table import RoutingTable
-
+from router.routing_policies import MultiPathRoutingPolicy
 
 def make_bundle(destination: str = "ground-station", next_hop: str | None = None) -> Bundle:
     return Bundle(
@@ -48,7 +49,6 @@ def make_contact_manager(tmp_path, contacts=None):
 
 
 # --- Wave-37 Legacy and Basic Compatibility Tests ---
-
 
 def test_legacy_policy_preserves_original_static_route():
     policy = LegacyRoutingPolicy()
@@ -130,7 +130,6 @@ def test_can_forward_is_deterministic_when_policy_returns_none(tmp_path):
 
 
 # --- Wave-38 Static Routing Baseline Tests ---
-
 
 def test_static_policy_returns_none_at_destination():
     policy = StaticRoutingPolicy(RoutingTable({"ground-station": {"other": "relay"}}))
@@ -219,7 +218,6 @@ def test_router_can_forward_returns_false_at_destination_even_if_contact_exists(
 
 # --- Wave-39 Contact-Aware Routing Policy Tests ---
 
-
 @pytest.fixture
 def wave39_routing_table():
     return RoutingTable({"node-A": {"node-C": "node-B"}})
@@ -307,7 +305,6 @@ def test_aether_router_can_use_contact_aware_policy_explicitly(wave39_routing_ta
 
 
 # --- Wave-40 Route Scoring Engine & Scored Routing Policy Tests ---
-
 
 def test_route_scorer_chooses_highest_score():
     candidates = [
@@ -483,7 +480,6 @@ def test_aether_router_can_use_scored_policy_explicitly(wave40_candidates, wave4
 
 
 # --- Wave-41 Contact Forecast + CGR-lite Tests ---
-
 
 def test_contact_forecast_finds_currently_open_contact(tmp_path):
     cm = make_contact_manager(
@@ -795,7 +791,6 @@ def test_router_integration_with_cgr_lite_separates_preference_from_forwarding(
 
 # --- Wave-46 Opportunistic Routing Tests ---
 
-
 @pytest.fixture
 def wave46_contact_manager(tmp_path):
     return make_contact_manager(
@@ -831,7 +826,6 @@ def wave46_contact_manager(tmp_path):
         ],
     )
 
-
 @pytest.fixture
 def wave46_candidates():
     return {
@@ -843,7 +837,6 @@ def wave46_candidates():
             ]
         }
     }
-
 
 def test_opportunistic_policy_holds_for_better_near_future_contact(wave46_candidates, wave46_contact_manager):
     policy = OpportunisticRoutingPolicy(wave46_candidates, wave46_contact_manager, hold_window=20)
@@ -951,3 +944,454 @@ def test_router_integration_with_opportunistic_policy_holds_then_forwards(wave46
     assert decision_later.reason == "selected_opportunistic_now"
     assert router.get_next_hop("node-A", "node-B", current_time=15) == "relay-high-soon"
     assert router.can_forward("node-A", bundle, current_time=15) is True
+
+
+# --- Wave-48 Multi-Path Routing Baseline Tests ---
+
+@pytest.fixture
+def wave48_contact_manager(tmp_path):
+    return make_contact_manager(
+        tmp_path,
+        contacts=[
+            {"source": "node-A", "target": "relay-1", "start_time": 0, "end_time": 100, "one_way_delay_ms": 10, "bandwidth_kbit": 100, "bidirectional": False},
+            {"source": "node-A", "target": "relay-2", "start_time": 0, "end_time": 100, "one_way_delay_ms": 10, "bandwidth_kbit": 100, "bidirectional": False},
+            {"source": "node-A", "target": "relay-3", "start_time": 0, "end_time": 100, "one_way_delay_ms": 10, "bandwidth_kbit": 100, "bidirectional": False},
+            {"source": "node-A", "target": "relay-closed", "start_time": 50, "end_time": 100, "one_way_delay_ms": 10, "bandwidth_kbit": 100, "bidirectional": False},
+        ],
+    )
+
+@pytest.fixture
+def wave48_candidates():
+    return {
+        "node-A": {
+            "node-B": [
+                RouteCandidate("relay-1", score=90),
+                RouteCandidate("relay-2", score=80),
+                RouteCandidate("relay-3", score=70),
+                RouteCandidate("relay-closed", score=99), # Highest score, but currently closed
+            ]
+        }
+    }
+
+
+def test_multipath_returns_top_k_paths(wave48_candidates, wave48_contact_manager):
+    policy = MultiPathRoutingPolicy(wave48_candidates, wave48_contact_manager, max_paths=2)
+    bundle = make_bundle(destination="node-B")
+    
+    hops = policy.select_next_hops("node-A", bundle, current_time=0)
+    
+    assert len(hops) == 2
+    assert hops == ["relay-1", "relay-2"]
+
+
+def test_multipath_excludes_closed_contacts(wave48_candidates, wave48_contact_manager):
+    policy = MultiPathRoutingPolicy(wave48_candidates, wave48_contact_manager, max_paths=3)
+    bundle = make_bundle(destination="node-B")
+    
+    hops = policy.select_next_hops("node-A", bundle, current_time=0)
+    
+    # relay-closed has score 99 but is excluded because it opens at t=50
+    assert len(hops) == 3
+    assert "relay-closed" not in hops
+    assert hops == ["relay-1", "relay-2", "relay-3"]
+
+
+def test_multipath_lexical_tie_break(tmp_path):
+    cm = make_contact_manager(
+        tmp_path,
+        contacts=[
+            {"source": "node-A", "target": "relay-Z", "start_time": 0, "end_time": 100, "one_way_delay_ms": 10, "bandwidth_kbit": 100, "bidirectional": False},
+            {"source": "node-A", "target": "relay-A", "start_time": 0, "end_time": 100, "one_way_delay_ms": 10, "bandwidth_kbit": 100, "bidirectional": False},
+        ],
+    )
+    candidates = {
+        "node-A": {
+            "node-B": [
+                RouteCandidate("relay-Z", score=50),
+                RouteCandidate("relay-A", score=50),
+            ]
+        }
+    }
+    
+    policy = MultiPathRoutingPolicy(candidates, cm, max_paths=2)
+    hops = policy.select_next_hops("node-A", make_bundle(destination="node-B"), current_time=0)
+    
+    # Same score, 'relay-A' comes lexically before 'relay-Z'
+    assert hops == ["relay-A", "relay-Z"]
+
+
+def test_multipath_backward_compatibility(wave48_candidates, wave48_contact_manager):
+    policy = MultiPathRoutingPolicy(wave48_candidates, wave48_contact_manager, max_paths=2)
+    bundle = make_bundle(destination="node-B")
+    
+    # evaluate_decision should wrap the top-1 choice
+    decision = policy.evaluate_decision("node-A", bundle, current_time=0)
+    assert decision.reason == "selected_multipath_candidate"
+    assert decision.next_hop == "relay-1"
+    
+    # select_next_hop should just return the top-1 choice string
+    hop = policy.select_next_hop("node-A", bundle, current_time=0)
+    assert hop == "relay-1"
+
+
+def test_multipath_degrades_to_single_path_when_max_paths_is_1(wave48_candidates, wave48_contact_manager):
+    policy = MultiPathRoutingPolicy(wave48_candidates, wave48_contact_manager, max_paths=1)
+    hops = policy.select_next_hops("node-A", make_bundle(destination="node-B"), current_time=0)
+    
+    assert len(hops) == 1
+    assert hops == ["relay-1"]
+
+
+def test_multipath_explicit_override_only_when_open(wave48_candidates, wave48_contact_manager):
+    policy = MultiPathRoutingPolicy(wave48_candidates, wave48_contact_manager, max_paths=2)
+    bundle = make_bundle(destination="node-B", next_hop="relay-closed")
+    
+    # Explicit override to a closed contact returns empty list
+    hops_closed = policy.select_next_hops("node-A", bundle, current_time=0)
+    assert hops_closed == []
+    
+    # At t=50, the contact is open
+    hops_open = policy.select_next_hops("node-A", bundle, current_time=50)
+    assert hops_open == ["relay-closed"]
+
+
+def test_multipath_repeated_calls_deterministic(wave48_candidates, wave48_contact_manager):
+    policy = MultiPathRoutingPolicy(wave48_candidates, wave48_contact_manager, max_paths=2)
+    bundle = make_bundle(destination="node-B")
+    
+    hops_1 = policy.select_next_hops("node-A", bundle, current_time=0)
+    hops_2 = policy.select_next_hops("node-A", bundle, current_time=0)
+    
+    assert hops_1 == hops_2
+    
+@pytest.fixture
+
+def wave48_contact_manager(tmp_path):
+
+    return make_contact_manager(
+
+        tmp_path,
+
+        contacts=[
+
+            {
+
+                "source": "node-A",
+
+                "target": "relay-1",
+
+                "start_time": 0,
+
+                "end_time": 100,
+
+                "one_way_delay_ms": 10,
+
+                "bandwidth_kbit": 100,
+
+                "bidirectional": False,
+
+            },
+
+            {
+
+                "source": "node-A",
+
+                "target": "relay-2",
+
+                "start_time": 0,
+
+                "end_time": 100,
+
+                "one_way_delay_ms": 10,
+
+                "bandwidth_kbit": 100,
+
+                "bidirectional": False,
+
+            },
+
+            {
+
+                "source": "node-A",
+
+                "target": "relay-3",
+
+                "start_time": 0,
+
+                "end_time": 100,
+
+                "one_way_delay_ms": 10,
+
+                "bandwidth_kbit": 100,
+
+                "bidirectional": False,
+
+            },
+
+            {
+
+                "source": "node-A",
+
+                "target": "relay-closed",
+
+                "start_time": 50,
+
+                "end_time": 100,
+
+                "one_way_delay_ms": 10,
+
+                "bandwidth_kbit": 100,
+
+                "bidirectional": False,
+
+            },
+
+        ],
+
+    )
+
+
+
+
+
+@pytest.fixture
+
+def wave48_candidates():
+
+    return {
+
+        "node-A": {
+
+            "node-B": [
+
+                RouteCandidate("relay-1", score=90),
+
+                RouteCandidate("relay-2", score=80),
+
+                RouteCandidate("relay-3", score=70),
+
+                RouteCandidate("relay-closed", score=99),
+
+            ]
+
+        }
+
+    }
+
+
+
+
+
+def test_multipath_returns_top_k_paths(wave48_candidates, wave48_contact_manager):
+
+    policy = MultiPathRoutingPolicy(wave48_candidates, wave48_contact_manager, max_paths=2)
+
+    bundle = make_bundle(destination="node-B")
+
+
+
+    hops = policy.select_next_hops("node-A", bundle, current_time=0)
+
+
+
+    assert hops == ["relay-1", "relay-2"]
+
+
+
+
+
+def test_multipath_excludes_closed_contacts(wave48_candidates, wave48_contact_manager):
+
+    policy = MultiPathRoutingPolicy(wave48_candidates, wave48_contact_manager, max_paths=3)
+
+    bundle = make_bundle(destination="node-B")
+
+
+
+    hops = policy.select_next_hops("node-A", bundle, current_time=0)
+
+
+
+    assert hops == ["relay-1", "relay-2", "relay-3"]
+
+    assert "relay-closed" not in hops
+
+
+
+
+
+def test_multipath_lexical_tie_break(tmp_path):
+
+    cm = make_contact_manager(
+
+        tmp_path,
+
+        contacts=[
+
+            {
+
+                "source": "node-A",
+
+                "target": "relay-Z",
+
+                "start_time": 0,
+
+                "end_time": 100,
+
+                "one_way_delay_ms": 10,
+
+                "bandwidth_kbit": 100,
+
+                "bidirectional": False,
+
+            },
+
+            {
+
+                "source": "node-A",
+
+                "target": "relay-A",
+
+                "start_time": 0,
+
+                "end_time": 100,
+
+                "one_way_delay_ms": 10,
+
+                "bandwidth_kbit": 100,
+
+                "bidirectional": False,
+
+            },
+
+        ],
+
+    )
+
+    candidates = {
+
+        "node-A": {
+
+            "node-B": [
+
+                RouteCandidate("relay-Z", score=50),
+
+                RouteCandidate("relay-A", score=50),
+
+            ]
+
+        }
+
+    }
+
+
+
+    policy = MultiPathRoutingPolicy(candidates, cm, max_paths=2)
+
+    hops = policy.select_next_hops("node-A", make_bundle(destination="node-B"), current_time=0)
+
+
+
+    assert hops == ["relay-A", "relay-Z"]
+
+
+
+
+
+def test_multipath_backward_compatibility(wave48_candidates, wave48_contact_manager):
+
+    policy = MultiPathRoutingPolicy(wave48_candidates, wave48_contact_manager, max_paths=2)
+
+    bundle = make_bundle(destination="node-B")
+
+
+
+    decision = policy.evaluate_decision("node-A", bundle, current_time=0)
+
+    assert decision.reason == "selected_multipath_candidate"
+
+    assert decision.next_hop == "relay-1"
+
+
+
+    hop = policy.select_next_hop("node-A", bundle, current_time=0)
+
+    assert hop == "relay-1"
+
+
+
+
+
+def test_multipath_degrades_to_single_path_when_max_paths_is_1(wave48_candidates, wave48_contact_manager):
+
+    policy = MultiPathRoutingPolicy(wave48_candidates, wave48_contact_manager, max_paths=1)
+
+
+
+    hops = policy.select_next_hops("node-A", make_bundle(destination="node-B"), current_time=0)
+
+
+
+    assert hops == ["relay-1"]
+
+
+
+
+
+def test_multipath_explicit_override_only_when_open(wave48_candidates, wave48_contact_manager):
+
+    policy = MultiPathRoutingPolicy(wave48_candidates, wave48_contact_manager, max_paths=2)
+
+    bundle = make_bundle(destination="node-B", next_hop="relay-closed")
+
+
+
+    hops_closed = policy.select_next_hops("node-A", bundle, current_time=0)
+
+    assert hops_closed == []
+
+
+
+    hops_open = policy.select_next_hops("node-A", bundle, current_time=50)
+
+    assert hops_open == ["relay-closed"]
+
+
+
+
+
+def test_multipath_repeated_calls_deterministic(wave48_candidates, wave48_contact_manager):
+
+    policy = MultiPathRoutingPolicy(wave48_candidates, wave48_contact_manager, max_paths=2)
+
+    bundle = make_bundle(destination="node-B")
+
+
+
+    hops_1 = policy.select_next_hops("node-A", bundle, current_time=0)
+
+    hops_2 = policy.select_next_hops("node-A", bundle, current_time=0)
+
+
+
+    assert hops_1 == hops_2
+
+
+
+
+
+def test_router_integration_with_multipath_policy_uses_first_path(wave48_candidates, wave48_contact_manager):
+
+    policy = MultiPathRoutingPolicy(wave48_candidates, wave48_contact_manager, max_paths=2)
+
+    router = AetherRouter(contact_manager=wave48_contact_manager, routing_policy=policy)
+
+    bundle = make_bundle(destination="node-B")
+
+
+
+    assert policy.select_next_hops("node-A", bundle, current_time=0) == ["relay-1", "relay-2"]
+
+    assert router.get_next_hop("node-A", "node-B", current_time=0) == "relay-1"
+
+    assert router.can_forward("node-A", bundle, current_time=0) is True

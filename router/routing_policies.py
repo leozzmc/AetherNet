@@ -188,12 +188,7 @@ class CGRLiteRoutingPolicy:
 
 
 class OpportunisticRoutingPolicy:
-    """
-    Wave-46: Bounded Opportunistic Hold-vs-Forward Baseline.
-    Evaluates currently open candidate contacts versus candidates opening in the 
-    near future (hold_window). If a significantly better candidate opens soon, 
-    the policy elects to hold the bundle rather than forward it immediately.
-    """
+    """Wave-46: Bounded Opportunistic Hold-vs-Forward Baseline."""
 
     def __init__(
         self, 
@@ -232,7 +227,6 @@ class OpportunisticRoutingPolicy:
             if self.contact_manager.is_forwarding_allowed(current_node, c.next_hop, current_time):
                 open_candidates.append(c)
             else:
-                # Check if it opens within the bounded hold window
                 opens_soon = False
                 for contact in self.contact_manager.contacts:
                     if contact.allows(current_node, c.next_hop):
@@ -251,7 +245,6 @@ class OpportunisticRoutingPolicy:
         if not best_open_name and best_future_name:
             return RoutingDecision(next_hop=None, reason="hold_for_better_contact")
 
-        # Both exist, we must compare them
         if best_open_name and best_future_name:
             best_open_obj = self._get_candidate_by_name(candidates, best_open_name)
             best_future_obj = self._get_candidate_by_name(candidates, best_future_name)
@@ -259,12 +252,89 @@ class OpportunisticRoutingPolicy:
             assert best_open_obj is not None
             assert best_future_obj is not None
 
-            # If the future candidate is strictly better (higher score), we hold.
             if best_future_obj.score > best_open_obj.score:
                 return RoutingDecision(next_hop=None, reason="hold_for_better_contact")
 
-        # Either there are no future candidates, or the current one is just as good/better
         return RoutingDecision(next_hop=best_open_name, reason="selected_opportunistic_now")
 
     def select_next_hop(self, current_node: str, bundle: Bundle, current_time: int) -> Optional[str]:
+        return self.evaluate_decision(current_node, bundle, current_time).next_hop
+
+
+class MultiPathRoutingPolicy:
+    """
+    Wave-48: Bounded Multi-Path Candidate Selection Baseline.
+    Evaluates multiple open contacts and selects the top-K candidates deterministically 
+    based on score and lexical order, without engaging in uncontrolled replication.
+    Maintains backward compatibility by falling back to the top-1 choice for existing APIs.
+    """
+
+    def __init__(
+        self,
+        candidate_routes: Dict[str, Dict[str, List[RouteCandidate]]],
+        contact_manager: ContactManager,
+        max_paths: int = 2
+    ):
+        self.candidate_routes = candidate_routes
+        self.contact_manager = contact_manager
+        self.max_paths = max_paths
+
+    def select_next_hops(self, current_node: str, bundle: Bundle, current_time: int) -> List[str]:
+        """
+        Wave-48 primary API: Selects up to `max_paths` valid and open next hops deterministically.
+        """
+        if current_node == bundle.destination:
+            return []
+
+        # Explicit override takes absolute precedence if open
+        if bundle.next_hop:
+            if self.contact_manager.is_forwarding_allowed(current_node, bundle.next_hop, current_time):
+                return [bundle.next_hop]
+            return []
+
+        candidates = self.candidate_routes.get(current_node, {}).get(bundle.destination, [])
+        
+        # Filter strictly for currently open contacts
+        valid_candidates = [
+            c for c in candidates
+            if self.contact_manager.is_forwarding_allowed(current_node, c.next_hop, current_time)
+        ]
+
+        if not valid_candidates:
+            return []
+
+        # Sort deterministically: highest score first, lexical order tie-break
+        sorted_candidates = sorted(
+            valid_candidates,
+            key=lambda c: (-c.score, c.next_hop)
+        )
+
+        return [c.next_hop for c in sorted_candidates[:self.max_paths]]
+
+    def evaluate_decision(self, current_node: str, bundle: Bundle, current_time: int) -> RoutingDecision:
+        """
+        Maintains Wave-42 metrics compatibility by reporting the primary (first) decision.
+        """
+        if current_node == bundle.destination:
+            return RoutingDecision(next_hop=None, reason="at_destination")
+
+        if bundle.next_hop:
+            if self.contact_manager.is_forwarding_allowed(current_node, bundle.next_hop, current_time):
+                return RoutingDecision(next_hop=bundle.next_hop, reason="explicit_override_open")
+            return RoutingDecision(next_hop=None, reason="explicit_override_blocked")
+
+        candidates = self.candidate_routes.get(current_node, {}).get(bundle.destination, [])
+        if not candidates:
+            return RoutingDecision(next_hop=None, reason="no_route")
+
+        hops = self.select_next_hops(current_node, bundle, current_time)
+        if not hops:
+            return RoutingDecision(next_hop=None, reason="contact_blocked")
+
+        return RoutingDecision(next_hop=hops[0], reason="selected_multipath_candidate")
+
+    def select_next_hop(self, current_node: str, bundle: Bundle, current_time: int) -> Optional[str]:
+        """
+        Maintains Phase-3 API compatibility by degrading cleanly to the top-1 choice.
+        """
         return self.evaluate_decision(current_node, bundle, current_time).next_hop
