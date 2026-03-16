@@ -1,441 +1,480 @@
-
 # AetherNet System Sequence
 
+This document describes the **end-to-end lifecycle of a bundle** inside the current AetherNet system.
 
+It is written for handoff and architecture continuity.
 
+The goal is to show how a bundle now moves through the platform after completion of:
 
-## End-to-End Bundle Lifecycle
+- Phase-2 transport reliability
+- Phase-2.2 observability and artifact export
+- Phase-3 routing intelligence
+- Phase-4 stress / resilience modeling
 
-This document describes the **complete lifecycle of a bundle** inside the AetherNet system.
+This is no longer only a Phase-2 transport pipeline.  
+The runtime path now includes:
 
-The goal is to show how bundles move through the system across multiple layers:
-
-- bundle generation
-- fragmentation
-- queue scheduling
-- store-carry-forward routing
-- multi-hop forwarding
-- fragment buffering
-- reassembly
-- delivery reporting
-
-This sequence represents the **reference execution path used by the simulator**.
+- routing-policy evaluation
+- QoS / effective priority calculation
+- storage-capacity enforcement
+- optional opportunistic holding
+- optional failure / partition runtime blocking
+- bounded multi-path candidate selection
 
 ---
 
-# High-Level Lifecycle
+# 1. High-Level Lifecycle
 
-The simplified lifecycle of a bundle in Phase-2:
+The simplified current lifecycle is:
 
-```
-
+```text
 Bundle Created
 ↓
-Fragmentation
+QoS Baseline Priority / Aging Evaluation
 ↓
-Priority Queue
+Priority Queue / Store Admission
 ↓
-DTN Store
+Store Capacity Enforcement
 ↓
-Contact Window Opens
+Routing Policy Decision
+↓
+(optional) Hold for Better Opportunity
+↓
+Contact Window Check
+↓
+(optional) Failure / Partition Runtime Gate
 ↓
 Forwarding Hop
 ↓
-Relay Storage
+Relay Storage / Repeat
 ↓
-Next Contact Window
+Destination Buffering
 ↓
-Destination Reception
-↓
-Fragment Reassembly
+Reassembly
 ↓
 Bundle Delivered
-
-````
+↓
+Metrics / Reports / Artifacts Exported
+```
 
 ---
 
-# Full System Sequence
+# 2. Current Runtime Sequence
 
 ```mermaid
 sequenceDiagram
-
     participant Scenario
     participant Simulator
-    participant LunarNode
+    participant QoS
     participant Queue
     participant Store
-    participant Router
-    participant RelayNode
+    participant Capacity as Store Capacity / Eviction
+    participant Policy as Routing Policy
+    participant Failure as Failure Model
+    participant NextHop
     participant Buffer
     participant Reassembly
-    participant GroundStation
     participant Metrics
+    participant Artifacts
 
-    Scenario->>Simulator: start scenario
+    Scenario->>Simulator: start scenario / create bundle
+    Simulator->>QoS: compute effective priority
+    QoS-->>Simulator: baseline priority + aging result
 
-    Simulator->>LunarNode: generate bundle
-
-    LunarNode->>Router: submit bundle
-
-    Router->>Router: fragment bundle (if needed)
-
-    Router->>Queue: enqueue bundle/fragment
-
+    Simulator->>Queue: enqueue bundle
     Queue->>Store: persist bundle
+    Store->>Capacity: enforce capacity if needed
+    Capacity-->>Store: keep bundle / drop victims
 
-    Note over Simulator: contact window opens (Lunar → Relay)
+    Note over Simulator,Policy: forwarding opportunity at current tick
+    Simulator->>Policy: evaluate routing decision
+    Policy-->>Simulator: next hop / hold / no route
 
-    Store->>Router: bundle ready for forwarding
+    alt hold or no route
+        Simulator->>Store: keep bundle stored
+        Simulator->>Metrics: record routing outcome
+    else next hop selected
+        Simulator->>Failure: optional node/link failure gate
+        Failure-->>Simulator: permit or block
+        alt blocked
+            Simulator->>Store: keep bundle stored
+            Simulator->>Metrics: record blocked forwarding opportunity
+        else permitted
+            Simulator->>NextHop: forward bundle / fragment
+            NextHop->>Store: relay-side store if intermediate hop
+            NextHop->>Buffer: destination-side fragment buffering if final hop
+            Buffer->>Reassembly: check fragment set completeness
+            Reassembly-->>NextHop: reconstruct original bundle
+            NextHop->>Metrics: record delivery / lifecycle timing
+        end
+    end
 
-    Router->>RelayNode: forward fragment
-
-    RelayNode->>Store: store fragment
-
-    Note over Simulator: later contact window (Relay → Ground)
-
-    Store->>Router: retrieve fragment
-
-    Router->>GroundStation: forward fragment
-
-    GroundStation->>Buffer: store fragment
-
-    Buffer->>Reassembly: check fragment set
-
-    Reassembly->>GroundStation: reconstruct bundle
-
-    GroundStation->>Metrics: record delivery
-
-    Metrics->>Metrics: update reports
-
-    Metrics->>Report: export experiment artifacts
-   
-    Report->>Artifacts: write JSON files
-````
+    Metrics->>Artifacts: export reports / JSON artifacts
+```
 
 ---
 
-# Step-by-Step Explanation
+# 3. Step-by-Step Explanation
 
-## 1 Bundle Generation
+## 3.1 Bundle Generation
 
 Bundles are created by scenario logic.
 
-Example bundle types:
+Typical bundle types include:
 
-```
+```text
 telemetry
 science
+bulk
 navigation
 ```
 
-Each bundle contains metadata such as:
+Each bundle carries metadata such as:
 
-```
+```text
 bundle_id
 priority
-ttl
-creation_tick
+created_at
+ttl_sec
+size_bytes
+destination
 ```
 
 ---
 
-# 2 Fragmentation
+## 3.2 QoS Priority Evaluation
 
-Large bundles may be fragmented before entering the network.
+Before forwarding pressure is considered, AetherNet can compute an **effective priority** based on:
 
-Fragmentation module:
+- intrinsic bundle priority
+- service-class baseline
+- deterministic priority aging
 
-```
-protocol/fragmentation.py
-```
+Module:
 
-Example transformation:
-
-```
-sci-001
-↓
-sci-001.frag-0
-sci-001.frag-1
-sci-001.frag-2
+```text
+router/qos.py
 ```
 
-Fragment metadata:
+Purpose:
 
-```
-original_bundle_id
-fragment_index
-total_fragments
-```
+- preserve service differentiation
+- reduce starvation under long waits
+- keep QoS logic pure and deterministic
 
 ---
 
-# 3 Queue Scheduling
+## 3.3 Queue and Store Admission
 
-Fragments enter the **Strict Priority Queue**.
+Bundles enter the strict priority queue and then are persisted into the DTN store.
 
-Location:
+Modules:
 
-```
+```text
 bundle_queue/priority_queue.py
-```
-
-The queue ensures higher-priority traffic is transmitted first.
-
-Example priority order:
-
-```
-telemetry > science
-```
-
----
-
-# 4 Store-Carry-Forward
-
-Bundles are stored when links are unavailable.
-
-Storage module:
-
-```
 store/store.py
 ```
 
-The store persists bundles until a contact window opens.
+Purpose:
+
+- preserve ordering discipline
+- support store-carry-forward behavior during disconnected windows
 
 ---
 
-# 5 Contact Window
+## 3.4 Store Capacity Enforcement
 
-Contact windows are managed by the simulator.
+The store no longer behaves as infinite.
+
+Modules:
+
+```text
+router/store_capacity.py
+router/eviction_policy.py
+metrics/congestion_metrics.py
+```
+
+Possible outcomes:
+
+- bundle is stored successfully
+- one or more victims are evicted due to storage pressure
+
+Current eviction baselines include:
+
+```text
+DropLowestPriorityPolicy
+DropOldestPolicy
+```
+
+---
+
+## 3.5 Routing Policy Evaluation
+
+At each forwarding opportunity, AetherNet asks the active routing policy to evaluate what should happen next.
+
+Primary module:
+
+```text
+router/routing_policies.py
+```
+
+Possible policy outputs now include:
+
+- static route selection
+- contact-aware route gating
+- scored candidate selection
+- CGR-lite future path preference
+- opportunistic hold-for-better-contact
+- bounded multi-path candidate selection
+
+This is the main Phase-3 intelligence layer.
+
+---
+
+## 3.6 Hold-vs-Forward Decision
+
+In opportunistic scenarios, the routing policy may decide **not** to forward immediately even when some path exists.
+
+Why:
+
+- a better contact may open soon
+- waiting may increase route quality
+- forwarding now may be strategically worse
+
+This is still deterministic and bounded by the configured hold window.
+
+---
+
+## 3.7 Contact Window Check
+
+Even when the routing policy selects a next hop, forwarding still requires a currently open contact.
 
 Module:
 
-```
-sim/contact_manager.py
-```
-
-Example:
-
-```
-tick 10 → lunar ↔ relay link opens
-tick 30 → relay ↔ ground link opens
+```text
+router/contact_manager.py
 ```
 
-Bundles can only be forwarded during these windows.
+This preserves the distinction between:
+
+- preferred route
+- usable route at the current tick
 
 ---
 
-# 6 Multi-Hop Forwarding
+## 3.8 Failure / Partition Runtime Gate
 
-Bundles move through multiple nodes:
-
-```
-Lunar Node
-   ↓
-Relay Node
-   ↓
-Ground Station
-```
-
-Each hop performs:
-
-```
-retrieve bundle
-forward bundle
-store bundle
-```
-
----
-
-# 7 Fragment Buffering
-
-At the destination node, fragments are buffered.
+Even if the contact plan says a link is open, forwarding may still be blocked by runtime failure conditions.
 
 Module:
 
+```text
+router/failure_model.py
 ```
+
+Supported runtime disruptions:
+
+- node outage windows
+- link failure windows
+- later recovery after the failure window ends
+
+Important architectural rule:
+
+```text
+routing policy chooses the route
+failure model decides whether reality allows the transfer now
+```
+
+---
+
+## 3.9 Forwarding Hop
+
+If all gates pass:
+
+- bundle or fragment is forwarded to the next hop
+- relay nodes store it for the next contact window
+- destination nodes buffer fragments for possible reassembly
+
+---
+
+## 3.10 Relay Storage and Repeated Hops
+
+Intermediate relay nodes repeat the same lifecycle:
+
+```text
+store
+wait
+route
+check contact
+check failure model
+forward
+```
+
+This is where:
+
+- storage pressure
+- congestion
+- QoS
+- failure windows
+- path diversity
+
+become experimentally meaningful.
+
+---
+
+## 3.11 Fragment Buffering and Reassembly
+
+At destination-side reception:
+
+- fragments are buffered
+- completeness is checked
+- the original bundle is reassembled only when the full set is valid
+
+Modules:
+
+```text
 protocol/reassembly_buffer.py
-```
-
-Structure:
-
-```
-original_bundle_id → fragment set
-```
-
-Example:
-
-```
-sci-001
- ├ frag-0
- ├ frag-1
- └ frag-2
-```
-
----
-
-# 8 Reassembly
-
-When all fragments arrive:
-
-```
 protocol/reassembly.py
 ```
 
-The system reconstructs the original bundle.
-
-Validation includes:
-
-```
-fragment count
-fragment indices
-metadata consistency
-```
-
 ---
 
-# 9 Delivery
+## 3.12 Delivery, Metrics, and Artifacts
 
-The reassembled bundle is marked as delivered.
+After successful delivery, AetherNet records:
 
-State transition:
+- lifecycle timing
+- delivery outcomes
+- routing decision metrics
+- storage-pressure metrics
+- experiment comparison artifacts
 
-```
-QUEUED
-→ STORED
-→ FORWARDED
-→ DELIVERED
-```
+Modules:
 
----
-
-# 10 Metrics and Reporting
-
-Delivery events are recorded.
-
-Metrics module:
-
-```
+```text
 metrics/network_metrics.py
+metrics/routing_metrics.py
+metrics/congestion_metrics.py
+sim/reporting.py
+sim/artifact_export.py
 ```
 
-Example data collected:
+Outputs include deterministic JSON artifacts suitable for offline analysis.
 
-```
-delivery latency
-fragment counts
-forwarding hops
-bundle lifecycle timing
-```
+---
 
-Reports are exported to:
+# 4. Sequence Variants Introduced After Phase-2
 
-```
-artifacts/reports/
+## 4.1 Routing-Driven Hold
+
+A bundle may remain in storage **not because no path exists**, but because the policy chose to hold for a better near-future contact.
+
+## 4.2 Runtime Block Despite Valid Route
+
+A routing policy may select a valid next hop, yet forwarding can still fail because:
+
+- the target node is in outage
+- the link is inside a failure window
+
+## 4.3 Store Overflow and Eviction
+
+A bundle may be dropped before forwarding due to:
+
+- finite storage limit
+- eviction policy outcome
+
+## 4.4 Multi-Path Candidate Selection
+
+A policy may now identify multiple valid current next hops, while legacy runtime compatibility still uses top-1 forwarding unless future waves explicitly introduce replicated execution.
+
+---
+
+# 5. Mermaid: Decision and Runtime Gates
+
+```mermaid
+flowchart TD
+    B[Bundle in Store] --> Q[QoS / Effective Priority]
+    Q --> R[Routing Policy Evaluation]
+
+    R -->|no route| KEEP1[Remain Stored]
+    R -->|hold for better contact| KEEP2[Remain Stored]
+    R -->|next hop selected| C[Contact Open Now?]
+
+    C -->|no| KEEP3[Remain Stored]
+    C -->|yes| F[Failure Model Permits Forwarding?]
+
+    F -->|no| KEEP4[Remain Stored]
+    F -->|yes| S[Forward to Next Hop]
+
+    S --> D{Destination?}
+    D -->|no| RELAY[Relay Store / Repeat]
+    D -->|yes| BUF[Fragment Buffer]
+    BUF --> REASS[Reassembly]
+    REASS --> DELIV[Delivered]
+    DELIV --> MET[Metrics / Reports / Artifacts]
 ```
 
 ---
 
-# Example Timeline
+# 6. Key Properties Future Maintainers Must Preserve
 
-Example delivery timeline for a scenario:
+## Deterministic ordering
 
+All decisions with multiple valid outcomes must have stable tie-breaks.
+
+## Separation of policy vs runtime gate
+
+Do not collapse these layers casually.
+
+## Bounded complexity
+
+- opportunistic routing is bounded by hold window
+- multi-path is bounded by top-k candidate selection
+- failure modeling is bounded by deterministic outage windows
+
+## Backward-compatible entrypoints
+
+Legacy runtime still relies on:
+
+```text
+select_next_hop(...)
+can_forward(...)
+can_forward_destination(...)
 ```
-tel-001 delivered at tick 15
-tel-002 delivered at tick 16
-sci-001 delivered at tick 17
-```
 
-This timeline is automatically generated by the reporting pipeline.
+These compatibility paths should remain stable unless there is a very strong reason to change them.
 
 ---
 
-# Key System Properties
+# 7. Summary
 
-AetherNet's lifecycle demonstrates several important DTN properties:
+The current AetherNet system sequence is no longer only:
 
-### Store-Carry-Forward
-
-Bundles survive network disconnections.
-
-### Contact-Aware Routing
-
-Bundles are transmitted only when links exist.
-
-### Priority Scheduling
-
-High-value traffic is transmitted first.
-
-### Fragmented Transport
-
-Large bundles can traverse constrained links.
-
-### Deterministic Simulation
-
-Runs are reproducible for research experiments.
-
----
-
-# Summary
-
-The AetherNet system sequence models a **complete delay-tolerant networking workflow**:
-
-```
+```text
 bundle creation
 fragmentation
-priority scheduling
-store-carry-forward routing
-multi-hop forwarding
-destination reassembly
-metrics reporting
+queueing
+store-carry-forward
+forwarding
+reassembly
+reporting
 ```
 
-This sequence forms the foundation for future experimentation in:
+It is now:
 
-```
-space networking
-deep-space DTN protocols
-contact-aware routing
-interplanetary communications
-```
-
-
-
----
-
-# system-sequence.md 修改建議
-
-你的文件其實 **很好**，只需要補兩個地方。
-
-### 修改 1
-
-在最前面加：
-
-```
-Phase-2.2 Extension
+```text
+bundle creation
+QoS evaluation
+queue/store admission
+storage-capacity enforcement
+routing-policy evaluation
+optional opportunistic hold
+contact check
+failure / partition gate
+forwarding
+relay repetition
+reassembly
+metrics and artifact export
 ```
 
-新增 section：
-
-```
-# Phase-2.2 Artifact Export
-
-After simulation completion:
-
-Metrics → Export Artifacts → JSON Output
-
-Artifacts enable offline analysis using
-Jupyter Notebook or Python scripts.
-```
-
-
-# Phase-2.2 Artifact Export
-
-After simulation completion:
-
-Metrics → Export Artifacts → JSON Output
-
-Artifacts enable offline analysis using
-Jupyter Notebook or Python scripts.
-
----
+This is the correct mental model for all future handoff work.

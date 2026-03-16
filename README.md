@@ -2,15 +2,77 @@
 
 **A Secure Delay-Tolerant Distributed Infrastructure Prototype for Space Networks**
 
-> **🟩Status:** Phase-2 Transport Layer (Fragmentation + Reassembly) implemented.
+> **Current status:** Phase-4 baseline completed.  
+> AetherNet now includes transport reliability, routing intelligence, storage-pressure modeling, opportunistic routing, failure / partition modeling, and bounded multi-path candidate selection.
 
 ![Aether Cover](/img/cover.png)
-## Project Purpose
-AetherNet explores how to build a secure, contact-aware, delay-tolerant message infrastructure for space-like environments characterized by intermittent connectivity and extreme latency.
 
-## AetherNet vs LunarNet
-- **AetherNet**: the core platform, routing policies, and simulation architecture
-- **LunarNet**: the reference deployment scenario using an `Earth ↔ LEO ↔ Moon` topology
+---
+
+## What AetherNet Is
+
+AetherNet is a **deterministic DTN simulation and experimentation platform** for space-like networks with:
+
+- intermittent connectivity
+- long delay
+- store-carry-forward forwarding
+- relay storage pressure
+- routing-policy experimentation
+- resilience / outage modeling
+
+It is designed for:
+
+- DTN routing research
+- contact-aware forwarding experiments
+- stress / resilience simulations
+- artifact-driven comparison workflows
+- future AI-agent and engineer handoff continuity
+
+---
+
+## What Has Been Implemented
+
+### Phase-1 / Phase-2 / Phase-2.2 foundation
+
+- simulator clock and scenario execution
+- contact-window-driven forwarding
+- strict priority queue
+- store-carry-forward persistence
+- fragmentation and reassembly
+- retransmission / custody helpers
+- experiment runner
+- reports, visualization specs, and artifact export
+
+### Phase-3 routing layer
+
+- routing policy abstraction
+- static routing baseline
+- contact-aware routing
+- route scoring for multi-candidate ranking
+- CGR-lite bounded future-contact reasoning
+- routing decision observability and routing metrics
+
+### Phase-4 stress / resilience layer
+
+- finite storage and congestion-control baseline
+- QoS service differentiation and priority aging
+- storage-pressure modeling with deterministic eviction policies
+- opportunistic hold-vs-forward routing baseline
+- deterministic failure / partition modeling
+- bounded multi-path candidate selection
+
+---
+
+## Repository Mental Model
+
+The easiest way to understand the project is:
+
+```text
+Phase-1 / 2 / 2.2 = transport core
+Phase-3            = routing brain
+Phase-4            = stress / resilience shell
+Phase-5            = planned experiment scalability layer
+```
 
 ---
 
@@ -47,232 +109,263 @@ flowchart LR
     DS -. timing data .-> RP
 ```
 
-> Phase-2 adds deterministic fragmentation and destination-side reassembly to the transport pipeline.
 
-## High Level Data Flow Example
-
-The following sequence demonstrates how Strict Priority and Store-Carry-Forward mechanisms interact across intermittent contact windows:
-
-
-> This example shows two contact windows: a first hop from lunar node to relay, followed by a later second hop from relay to ground station.
+## High-Level Architecture
 
 ```mermaid
-sequenceDiagram
-    participant L as Lunar Node
-    participant R as Relay Node
-    participant G as Ground Station
+flowchart TB
+    subgraph Simulator_Core
+        SCEN[Scenarios / Experiments]
+        SIM[Simulator Tick Loop]
+        CM[Contact Manager]
+    end
 
-    Note over L,R: Contact window 1 opens
-    L->>R: Forward telemetry bundle tel-001
-    R-->>R: Store at relay
-    L->>R: Forward telemetry bundle tel-002
-    R-->>R: Store at relay
-    L->>R: Forward science bundle sci-001
-    R-->>R: Store at relay
+    subgraph Routing_and_Decision
+        RP[Routing Policies]
+        SCORE[Route Scoring]
+        CGR[CGR-lite]
+        MP[Multi-Path Selection]
+        ROBS[Routing Decision / Metrics]
+    end
 
-    Note over R,G: Contact window 2 opens later
-    R->>G: Deliver tel-001
-    R->>G: Deliver tel-002
-    R->>G: Deliver sci-001
-```
+    subgraph Storage_and_Stress
+        STORE[DTN Store]
+        CAP[Store Capacity]
+        EVICT[Eviction Policies]
+        QOS[QoS / Priority Aging]
+        FAIL[Failure Model]
+    end
 
-## Phase-2 Transport Lifecycle
+    subgraph Output
+        MET[Metrics / Reports]
+        ART[Artifacts]
+    end
 
-In Phase-2, AetherNet extends the DTN pipeline to support **bundle fragmentation and reassembly**, allowing large bundles to traverse multi-hop paths across intermittent contact windows.
+    SCEN --> SIM
+    SIM --> CM
+    SIM --> RP
+    RP --> SCORE
+    RP --> CGR
+    RP --> MP
+    RP --> ROBS
 
-The simplified lifecycle is:
-
-```
-Bundle Created
-↓
-Fragmentation
-↓
-Strict Priority Queue
-↓
-DTN Store
-↓
-Contact Window Opens
-↓
-Multi-hop Forwarding
-↓
-Fragment Buffering
-↓
-Reassembly
-↓
-Bundle Delivered
-```
-
-
-This lifecycle models how bundles survive disconnections and traverse the network using **store-carry-forward routing**.
-
-For the full system-level sequence diagram and detailed explanation, see: `docs/system-sequence.md`
-
-
-## Repository Structure
-```mermaid
-flowchart TD
-    SIM[sim/]
-    ROUTER[router/]
-    QUEUE[bundle_queue/]
-    STORE[store/]
-    METRICS[metrics/]
-    DOCS[docs/]
-    TESTS[tests/]
-
-    SIM --> ROUTER
-    SIM --> QUEUE
     SIM --> STORE
-    SIM --> METRICS
+    STORE --> CAP
+    CAP --> EVICT
+    STORE --> QOS
+    SIM --> FAIL
 
-    DOCS --> SIM
-    TESTS --> SIM
-    TESTS --> ROUTER
-    TESTS --> QUEUE
-    TESTS --> STORE
+    ROBS --> MET
+    STORE --> MET
+    MET --> ART
 ```
 
 ---
 
-## Built-in Scenarios
-AetherNet currently includes three reference scenarios intended to demonstrate the core Phase-1 DTN behaviors of the platform:
+## Runtime Lifecycle
 
-- `default_multihop` — normal multi-hop delivery with telemetry prioritized ahead of science traffic.
-- `delayed_delivery` — successful delivery with a significantly delayed second contact window (proving relay storage capabilities).
-- `expiry_before_contact` — a short-lived telemetry bundle expires before a usable contact window opens (proving retention and garbage collection).
+```mermaid
+sequenceDiagram
+    participant Scenario
+    participant Simulator
+    participant Store
+    participant Policy
+    participant FailureGate
+    participant NextHop
+    participant Metrics
+
+    Scenario->>Simulator: create bundle
+    Simulator->>Store: enqueue / persist
+    Store-->>Simulator: bundle available for future forwarding
+
+    Simulator->>Policy: evaluate routing decision
+    Policy-->>Simulator: next hop / hold / no route
+
+    alt next hop selected
+        Simulator->>FailureGate: contact + runtime gate checks
+        FailureGate-->>Simulator: permit or block
+        alt permitted
+            Simulator->>NextHop: forward bundle
+            NextHop->>Metrics: record lifecycle outcome
+        else blocked
+            Simulator->>Store: keep bundle stored
+        end
+    else hold or no route
+        Simulator->>Store: keep bundle stored
+    end
+```
+
+For the detailed step-by-step sequence, see:
+
+- `docs/system-sequence.md`
+
+---
+
+## Core Source Areas
+
+### Routing / decision logic
+
+```text
+router/routing_policies.py
+router/contact_graph.py
+router/route_scoring.py
+router/routing_decision.py
+metrics/routing_metrics.py
+```
+
+### Storage / stress / resilience
+
+```text
+router/store_capacity.py
+router/eviction_policy.py
+router/qos.py
+router/failure_model.py
+metrics/congestion_metrics.py
+```
+
+### Transport / simulation
+
+```text
+protocol/
+sim/
+store/
+bundle_queue/
+```
+
+### Documentation / handoff
+
+```text
+README.md
+docs/roadmap.md
+docs/system-sequence.md
+docs/phase-2-whitepaper.md
+docs/phase-2-2-whitepaper.md
+docs/phase-3-4-whitepaper.md
+```
+
+---
 
 ## Quickstart
 
 ### 1. Environment setup
+
 AetherNet requires Python 3.10+.
+
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
 make setup-dev
 ```
 
-### 2. Local Validation (Smoke Test)
-Run the smoke test to ensure core paths are intact before pushing changes:
+### 2. Smoke validation
+
 ```bash
 make smoke
 ```
 
-### 3. Run Experiments
-**Run a single scenario (Makefile shortcut):**
+### 3. Run a demo scenario
+
 ```bash
 make demo
 ```
-**Run a single scenario :**
+
+or:
 
 ```bash
 ./scripts/run_demo.sh
 ```
 
+### 4. Run all built-in comparisons
 
-**Run all built-in scenarios (Makefile shortcut):**
 ```bash
 make compare
 ```
-*Generated outputs are written under `artifacts/`. See `docs/artifacts.md` for details.*
 
-**Run all built-in scenarios (Makefile shortcut):**
+or:
 
 ```bash
 ./scripts/run_compare.sh
 ```
 
-### 4. Run tests
+Generated outputs are written under `artifacts/`.
 
-Using the Makefile:
+### 5. Run tests
 
 ```bash
 make test
 ```
 
-Directly with pytest:
+or:
 
 ```bash
 pytest tests/
 ```
 
+---
 
-## Developer Ergonomics & CI
-The project uses a lightweight `Makefile` as a convenience wrapper and tracks developer dependencies via `requirements-dev.txt`. A minimal GitHub Actions workflow is included to automatically validate pull requests. 
+## Current Recommended Reading Order for Handoff
 
-For more details on contributing and interpreting the architecture, see:
-- `docs/development.md`
-- `docs/architecture.md`
-- `docs/reports.md`
+If you are a new engineer or AI agent, read these in order:
 
-## Current Limitations / Non-Goals
-The following remain intentionally out of scope for the current MVP:
-- real network transport (HTTP, gRPC, TCP/UDP data plane)
-- distributed task scheduling or Kubernetes/K3s orchestration
-- orbital mechanics or RF-layer physical simulation
-- database-backed persistence
-- production observability stack
+1. `README.md`
+2. `docs/roadmap.md`
+3. `docs/system-sequence.md`
+4. `docs/phase-3-4-whitepaper.md`
+5. `docs/phase-2-2-whitepaper.md`
 
+This order gives you:
 
-## Demo
-
-Run the built-in AetherNet scenarios:
-
-```bash
-make compare
-```
-
-This produces scenario reports under:
-
-```
-artifacts/reports/
-```
-
-Example delivery timeline:
-
-```
-tel-001 delivered at tick 15
-tel-002 delivered at tick 16
-sci-001 delivered at tick 17
-```
-
-See:
-- `docs/demo.md`
-- `docs/artifacts.md`
+- repository overview
+- milestone / wave context
+- runtime lifecycle
+- Phase-3 / Phase-4 implementation meaning
+- earlier transport / artifact context
 
 ---
 
+## What Is Intentionally Not Here Yet
 
-## Project Status
+The following are still out of scope or only partially modeled:
 
-AetherNet currently consists of two major development phases.
+- real network transport planes
+- orbital mechanics / RF-layer simulation
+- uncontrolled replicated multipath execution
+- probabilistic reliability models
+- large-scale parameter sweep engine
+- paper-ready benchmark packaging
 
-### Phase-1 (Core DTN Simulator)
+Those belong to later roadmap phases.
 
-Phase-1 implemented the foundational DTN architecture:
+---
 
-* bundle lifecycle model
-* strict priority scheduling
-* store-carry-forward routing
-* contact-aware transmission windows
-* multi-hop relay simulation
-* metrics and reporting infrastructure
+## Next Recommended Roadmap Direction
 
-These capabilities allow AetherNet to simulate basic delay-tolerant routing across intermittent contact windows.
+The next major work should focus on **Phase-5 experiment scalability**, not random new policy complexity.
 
-### Phase-2 (Fragmentation & Reassembly)
+Recommended next sequence:
 
-Phase-2 extends the simulator with transport-layer realism:
-
-* deterministic bundle fragmentation
-* fragment metadata tracking
-* fragment buffering at destination nodes
-* automatic bundle reassembly
-* integration with simulator delivery lifecycle
-
-This enables the simulator to model the transport of large bundles across constrained contact windows.
-
-Technical details of Phase-2 can be found in:
-
-```
-docs/phase-2-whitepaper.md
+```text
+Wave-49 scenario generator
+Wave-50 parameter sweep engine
+Wave-51 routing comparison framework
+Wave-52 paper-ready experiment pipeline
 ```
 
+---
+
+## Summary
+
+AetherNet is now best understood as:
+
+> a deterministic DTN routing-and-resilience experimentation core for space-network research.
+
+It already supports meaningful research around:
+
+- routing policy choice
+- future-contact reasoning
+- storage pressure
+- opportunistic waiting
+- outage / partition recovery
+- bounded path diversity
+
+The next bottleneck is experiment scalability and reproducible comparison workflows.

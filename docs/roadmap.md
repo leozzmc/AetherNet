@@ -1,16 +1,16 @@
 # AetherNet Roadmap
 
-**AetherNet**
+**AetherNet**  
 A Secure Delay-Tolerant Distributed Infrastructure Prototype for Space Networks
 
-This roadmap describes the planned evolution of AetherNet from a **Phase-1 DTN transport simulator** into a **research-grade space networking platform**.
+This roadmap describes the evolution of AetherNet from a **Phase-1 DTN transport simulator** into a **research-grade space networking platform**.
 
-The purpose of this document is to help:
+This document is written primarily for:
 
-* new engineers onboard quickly
-* future ChatGPT sessions continue development safely
-* contributors understand architectural priorities
-* research users understand the simulator's long-term direction
+- new engineers onboarding to the repository
+- future AI-agent / ChatGPT handoff sessions
+- contributors planning the next Wave safely
+- research users trying to understand what is already implemented vs. what remains future work
 
 ---
 
@@ -22,32 +22,47 @@ AetherNet has completed:
 Phase-1   core DTN simulator
 Phase-2   transport reliability baseline
 Phase-2.2 observability and research tooling
+Phase-3   routing intelligence baseline
+Phase-4   stress / resilience baseline
 ```
 
 Current system capabilities include:
 
-* deterministic scenario execution
-* contact-window-driven forwarding
-* store-carry-forward persistence
-* strict priority queueing
-* deterministic fragmentation and reassembly
-* partial transmission helper
-* fragment retransmission helper
-* fragment garbage collection
-* custody transfer baseline
-* contact plan parser
-* experiment runner
-* reporting and comparison
-* research visualization spec generation
-* artifact export
+- deterministic scenario execution
+- contact-window-driven forwarding
+- store-carry-forward persistence
+- strict priority queueing
+- deterministic fragmentation and reassembly
+- partial transmission helper
+- fragment retransmission helper
+- fragment garbage collection
+- custody transfer baseline
+- contact plan parsing
+- experiment runner
+- reporting and comparison
+- visualization spec generation
+- deterministic artifact export
+- pluggable routing policies
+- static routing baseline
+- contact-aware routing
+- route scoring and multi-candidate ranking
+- CGR-lite bounded future-contact reasoning
+- routing decision observability and routing metrics
+- congestion-control baseline with finite storage
+- QoS baseline with priority aging
+- storage-pressure modeling with eviction policy abstraction
+- opportunistic hold-vs-forward routing baseline
+- deterministic failure / partition modeling
+- bounded multi-path candidate selection
 
-AetherNet is now ready to transition from **transport realism** into **routing research**.
+AetherNet is now beyond transport realism.  
+It has entered the stage of **routing, resilience, and storage-pressure experimentation**.
 
 ---
 
 # 2. Guiding Principles
 
-All future development should preserve the following properties:
+All future development should preserve the following properties.
 
 ## Determinism
 
@@ -58,28 +73,30 @@ The same inputs should produce the same outputs.
 
 Each Wave should:
 
-* be small
-* have clear boundaries
-* include tests
-* avoid unnecessary refactors
+- be small
+- have clear boundaries
+- include tests
+- avoid unnecessary refactors
 
 ## Additive Architecture
 
 New features should prefer:
 
-* new helper modules
-* policy layers
-* clear interfaces
-* low coupling
+- new helper modules
+- policy layers
+- clear interfaces
+- low coupling
+- backward-compatible wrappers over API breakage
 
 ## Research Utility
 
 Every major addition should improve one or more of:
 
-* realism
-* experimentability
-* observability
-* reproducibility
+- realism
+- experimentability
+- observability
+- reproducibility
+- policy comparability
 
 ---
 
@@ -89,13 +106,13 @@ Every major addition should improve one or more of:
 
 Completed baseline:
 
-* scenario system
-* simulator clock and tick execution
-* contact window scheduling
-* store-carry-forward
-* strict priority queue
-* multi-hop forwarding
-* baseline reporting
+- scenario system
+- simulator clock and tick execution
+- contact window scheduling
+- store-carry-forward
+- strict priority queue
+- multi-hop forwarding
+- baseline reporting
 
 ---
 
@@ -111,8 +128,8 @@ Added contact-capacity-aware fragmentation planning.
 
 Added helper logic for splitting a bundle into:
 
-* transmitted part
-* residual part
+- transmitted part
+- residual part
 
 ### Wave-28 — Contact Plan Parser
 
@@ -150,270 +167,232 @@ Added visualization-spec builder for comparison outputs.
 
 Added deterministic JSON artifact export for:
 
-* batch results
-* aggregate comparisons
-* visualization specs
-* manifests
+- batch results
+- aggregate comparisons
+- visualization specs
+- manifests
 
 ---
 
-# 4. Phase-3: Routing Layer
+## Phase-3: Routing Layer
 
-Phase-3 focuses on the **routing brain** of AetherNet.
+Phase-3 delivered the **routing brain** of AetherNet.
 
-The simulator already knows how to:
+What Phase-3 added:
 
-* store bundles
-* fragment bundles
-* retry fragments
-* collect metrics
-* export results
+- policy abstraction
+- baseline route selection
+- contact-aware next-hop gating
+- multi-candidate scoring
+- bounded future-contact reasoning
+- routing observability and comparison primitives
 
-What it still lacks is a mature, pluggable routing decision framework.
+### Wave-37 — Routing Policy Framework
 
-This phase introduces **routing policies**, **route scoring**, and **contact-aware path selection**.
+Delivered:
 
----
+- pluggable routing policy abstraction
+- backward-compatible default routing behavior
+- router-level policy injection
+- policy-focused test coverage
 
-## Wave-37 — Routing Policy Framework
-
-Goal:
-
-Create a routing policy abstraction so that multiple routing algorithms can be plugged into AetherNet.
-
-Planned capabilities:
-
-* define a routing policy interface
-* allow simulator/forwarding engine to delegate next-hop decisions
-* keep default routing simple and deterministic
-* preserve backward compatibility
-
-Likely components:
+Primary outcome:
 
 ```text
-router/routing_policy.py
-router/policies/
+AetherRouter no longer hardcodes one routing behavior.
 ```
 
-Expected outputs:
+### Wave-38 — Static Routing Baseline
 
-* policy interface
-* baseline direct-contact policy
-* tests for policy selection behavior
+Delivered:
 
----
+- deterministic static route lookup baseline
+- explicit no-route semantics
+- destination-arrival semantics
+- stable baseline for later policy comparison
 
-## Wave-38 — Static Routing Baseline
-
-Goal:
-
-Add a simple static routing policy to establish a stable, debuggable routing baseline.
-
-Planned capabilities:
-
-* explicit route mapping
-* predictable hop sequences
-* route validation for known topologies
-
-Example:
+Primary outcome:
 
 ```text
-lunar-node -> leo-relay -> ground-station
+AetherNet gained a debuggable reference routing baseline.
 ```
 
-Why this matters:
+### Wave-39 — Contact-Aware Routing
 
-Before implementing complex routing, the simulator needs a strong baseline policy for comparison.
+Delivered:
 
----
+- routing decisions gated by current contact availability
+- explicit contact-blocked behavior
+- safe distinction between “route exists” and “route usable now”
 
-## Wave-39 — Contact-Aware Routing
+Primary outcome:
 
-Goal:
+```text
+AetherNet became contact-aware at routing-decision time.
+```
 
-Make routing decisions aware of **future contact windows**.
+### Wave-40 — Route Scoring Engine
 
-Planned capabilities:
+Delivered:
 
-* inspect contact plan before selecting next hop
-* hold bundles if a better future contact is about to open
-* avoid naive immediate forwarding when it harms delivery
+- deterministic candidate ranking
+- score-based next-hop selection
+- lexical tie-breaks for stable ordering
+- scored multi-candidate routing baseline
 
-Research value:
+Primary outcome:
 
-This is the first step toward **time-aware DTN routing**.
+```text
+AetherNet can rank multiple candidate next hops instead of using only one hardwired choice.
+```
 
----
+### Wave-41 — CGR-lite
 
-## Wave-40 — Route Scoring Engine
+Delivered:
 
-Goal:
+- bounded future-contact reasoning
+- two-hop earliest-arrival approximation
+- future-path preference without full graph-engine complexity
+- clean separation between policy preference and current forwarding feasibility
 
-Introduce route scoring to compare candidate paths.
+Primary outcome:
 
-Possible scoring dimensions:
+```text
+AetherNet supports bounded future-contact routing research.
+```
 
-* earliest arrival
-* hop count
-* delivery probability
-* expiry risk
-* storage pressure
+### Wave-42 — Routing Metrics
 
-Expected outputs:
+Delivered:
 
-* pluggable scoring function
-* deterministic path ranking
-* route decision debug output
+- RoutingDecision abstraction
+- policy introspection via decision reasons
+- RoutingMetricsCollector
+- deterministic routing-observability baseline
 
----
+Primary outcome:
 
-## Wave-41 — CGR-lite
-
-Goal:
-
-Implement a simplified **Contact Graph Routing** baseline.
-
-Scope:
-
-* not full NASA-grade CGR yet
-* enough to model time-expanded routing logic
-* compute future-aware delivery paths across scheduled contacts
-
-Core ideas:
-
-* time-varying graph
-* contact window graph edges
-* earliest-arrival route selection
-
-This will likely be the first major research milestone after transport completion.
+```text
+Routing policies can now be compared by decision reason, not just by top-hop output.
+```
 
 ---
 
-## Wave-42 — Routing Metrics
+## Phase-4: Advanced DTN Stress / Resilience Baseline
 
-Goal:
+Phase-4 extends AetherNet from “intelligent routing” into “routing under stress, scarcity, and disruption”.
 
-Add routing observability.
+### Wave-43 — Congestion Control
 
-Planned metrics:
+Delivered:
 
-* route choice count
-* average hop count
-* route changes
-* first-hop decision timing
-* failed routing decisions
-* per-policy delivery ratio
+- finite node storage capacity baseline
+- deterministic overflow drop behavior
+- congestion metrics for store pressure
 
-This wave allows **routing algorithms to be compared experimentally**.
+Primary outcome:
 
----
+```text
+AetherNet no longer assumes infinite storage.
+```
 
-# 5. Phase-4: Advanced DTN Research
+### Wave-44 — Priority / QoS
 
-Phase-4 expands AetherNet from a routing simulator into a broader **DTN reliability and network stress research platform**.
+Delivered:
 
----
+- differentiated service-class priority baseline
+- deterministic priority aging
+- pure QoS helper logic without mutating bundle state
 
-## Wave-43 — Congestion Control
+Primary outcome:
 
-Goal:
+```text
+AetherNet can model starvation mitigation and service-class differentiation.
+```
 
-Model congestion-aware transport and storage pressure behavior.
+### Wave-45 — Storage Pressure Modeling
 
-Possible features:
+Delivered:
 
-* queue overflow policy
-* congestion-triggered drops
-* congestion-aware forwarding decisions
-* delivery degradation under bottlenecks
+- eviction policy abstraction
+- DropLowestPriorityPolicy baseline
+- DropOldestPolicy baseline
+- storage-pressure metrics such as peak occupancy and dropped bytes
 
----
+Primary outcome:
 
-## Wave-44 — Priority / QoS
+```text
+AetherNet can compare deterministic storage-eviction strategies.
+```
 
-Goal:
+### Wave-46 — Opportunistic Routing
 
-Refine priority handling beyond strict queue ordering.
+Delivered:
 
-Possible features:
+- bounded hold-vs-forward opportunistic policy
+- deterministic hold window
+- explicit “hold for better near-future contact” behavior
 
-* differentiated service classes
-* priority aging
-* policy-dependent forwarding
-* science vs telemetry tradeoffs
+Primary outcome:
 
----
+```text
+AetherNet can prefer strategic waiting over immediate forwarding.
+```
 
-## Wave-45 — Storage Pressure Modeling
+### Wave-47 — Failure / Partition Modeling
 
-Goal:
+Delivered:
 
-Simulate realistic node storage constraints.
+- node outage windows
+- link failure windows
+- runtime forwarding gate for outage / partition simulation
+- deterministic recovery semantics after failure windows end
 
-Possible features:
+Primary outcome:
 
-* finite store capacity
-* eviction policies
-* storage occupancy metrics
-* relay pressure scenarios
+```text
+AetherNet can model temporary partitions and recovery without polluting routing-policy logic.
+```
 
----
+### Wave-48 — Multi-Path Forwarding Baseline
 
-## Wave-46 — Opportunistic Routing
+Delivered:
 
-Goal:
+- deterministic top-k next-hop candidate selection
+- bounded multi-path path-diversity baseline
+- backward-compatible single-path API fallback
+- no uncontrolled replication
 
-Support more DTN-native forwarding strategies.
+Primary outcome:
 
-Possible strategies:
-
-* epidemic-inspired forwarding
-* spray-and-wait variants
-* opportunistic custody handoff
-* hold-vs-forward experiments
-
----
-
-## Wave-47 — Failure / Partition Modeling
-
-Goal:
-
-Introduce explicit network failure scenarios.
-
-Possible cases:
-
-* lost contacts
-* relay failure
-* node outage
-* long partitions
-* intermittent rejoining
-
-This is especially valuable for space-network resilience research.
+```text
+AetherNet can reason about multiple current viable paths without yet performing full replicated transmission.
+```
 
 ---
 
-## Wave-48 — Multi-Path Forwarding
+# 4. Current Architectural Milestone
 
-Goal:
+AetherNet has now reached the following milestone state:
 
-Allow bundles or fragments to exploit multiple potential paths.
+```text
+Milestone A — DTN Transport Complete           ✅
+Milestone B — Routing Framework Ready          ✅
+Milestone C — Time-Aware Routing Ready         ✅
+Milestone D — Stress / Resilience Baseline     ✅
+```
 
-Possible features:
-
-* redundant forwarding
-* path diversity experiments
-* resilience under link loss
-* multipath delivery probability analysis
-
----
-
-# 6. Phase-5: Research Platform Maturity
-
-Phase-5 turns AetherNet into a broader **research experimentation framework**.
+The next major frontier is **Phase-5: research platform maturity**.
 
 ---
 
-## Wave-49 — Scenario Generator
+# 5. Next Recommended Roadmap
+
+## Phase-5: Research Platform Maturity
+
+Phase-5 should turn the current routing / resilience core into a broader **experiment framework**.
+
+### Wave-49 — Scenario Generator
 
 Goal:
 
@@ -421,16 +400,20 @@ Generate scenario families automatically.
 
 Possible outputs:
 
-* parameterized contact plans
-* topology variants
-* bandwidth-delay sweeps
-* relay timing variants
+- parameterized contact plans
+- topology variants
+- bandwidth-delay sweeps
+- relay timing variants
+- failure-window variants
+- storage-pressure variants
 
-This makes experiment generation scalable.
+Why this matters:
+
+The platform now has enough behaviors to justify systematic scenario generation instead of hand-written single scenarios only.
 
 ---
 
-## Wave-50 — Parameter Sweep Engine
+### Wave-50 — Parameter Sweep Engine
 
 Goal:
 
@@ -438,16 +421,18 @@ Support systematic large-scale experiment execution.
 
 Possible features:
 
-* multiple scenario variants
-* multiple policy variants
-* multiple tick sizes / end times
-* deterministic batch matrix execution
+- scenario matrices
+- policy matrices
+- hold-window / max-path sweeps
+- storage-capacity sweeps
+- failure-window sweeps
+- deterministic batch matrix execution
 
-This wave builds on the experiment runner from Wave-34.
+This wave should build on the existing experiment runner rather than replace it.
 
 ---
 
-## Wave-51 — Routing Comparison Framework
+### Wave-51 — Routing Comparison Framework
 
 Goal:
 
@@ -455,14 +440,16 @@ Standardize routing algorithm comparison.
 
 Expected outputs:
 
-* policy vs policy comparisons
-* comparable metrics bundles
-* research-grade comparison artifacts
-* reproducible experiment matrices
+- policy vs policy comparisons
+- comparable metrics bundles
+- research-grade comparison artifacts
+- reproducible experiment manifests
+
+This wave should build on Wave-42 routing metrics rather than invent a separate observability path.
 
 ---
 
-## Wave-52 — Paper-Ready Experiment Pipeline
+### Wave-52 — Paper-Ready Experiment Pipeline
 
 Goal:
 
@@ -470,41 +457,38 @@ Make AetherNet suitable for academic-style reproducible experiments.
 
 Possible capabilities:
 
-* one-command experiment batches
-* reproducible result packaging
-* chart-ready JSON outputs
-* table-friendly metrics summaries
-* fixed experiment manifests
+- one-command experiment batches
+- reproducible result packaging
+- chart-ready JSON outputs
+- table-friendly metrics summaries
+- fixed experiment manifests
+- benchmark scenario packs
 
 ---
 
-# 7. Suggested Execution Order
+# 6. Suggested Execution Order
 
-The recommended near-term priority is:
+Recommended near-term priority:
 
 ```text
-Wave-37 routing policy framework
-Wave-38 static routing baseline
-Wave-39 contact-aware routing
-Wave-40 route scoring engine
-Wave-41 CGR-lite
-Wave-42 routing metrics
+Wave-49 scenario generator
+Wave-50 parameter sweep engine
+Wave-51 routing comparison framework
+Wave-52 paper-ready experiment pipeline
 ```
 
-This sequence is recommended because:
+This is the recommended order because:
 
-1. routing abstraction must come first
-2. static routing gives a baseline
-3. contact awareness introduces time-varying reasoning
-4. scoring enables policy sophistication
-5. CGR-lite becomes feasible only after the above exist
-6. routing metrics are essential for comparing policies
+1. the routing / resilience core is already implemented
+2. the next bottleneck is experiment scalability
+3. comparison value comes from repeated scenario execution, not just more policies
+4. paper-ready workflows should build on already-stable experiment and comparison primitives
 
 ---
 
-# 8. Suggested Milestone Labels
+# 7. Suggested Milestone Labels
 
-These milestone labels may be useful in PRs, GitHub Projects, or internal planning.
+These milestone labels are useful in PRs, GitHub Projects, release notes, or handoff sessions.
 
 ## Milestone A — DTN Transport Complete
 
@@ -534,6 +518,12 @@ Outcome:
 
 AetherNet supports pluggable routing policies.
 
+Status:
+
+```text
+completed
+```
+
 ---
 
 ## Milestone C — Time-Aware Routing Ready
@@ -548,9 +538,35 @@ Outcome:
 
 AetherNet supports contact-aware and CGR-lite routing research.
 
+Status:
+
+```text
+completed
+```
+
 ---
 
-## Milestone D — Reliability and Stress Research Ready
+## Milestone D — Routing Observability Ready
+
+Includes:
+
+```text
+Wave-42
+```
+
+Outcome:
+
+Routing policies expose deterministic decision reasons and metrics.
+
+Status:
+
+```text
+completed
+```
+
+---
+
+## Milestone E — Stress / Resilience Baseline Ready
 
 Includes:
 
@@ -560,11 +576,17 @@ Wave-43 to Wave-48
 
 Outcome:
 
-AetherNet supports congestion, storage, failure, and multipath experiments.
+AetherNet supports congestion, QoS, storage pressure, opportunistic hold-vs-forward, deterministic failure modeling, and bounded multi-path path diversity.
+
+Status:
+
+```text
+completed
+```
 
 ---
 
-## Milestone E — Reproducible Research Platform
+## Milestone F — Reproducible Research Platform
 
 Includes:
 
@@ -574,87 +596,100 @@ Wave-49 to Wave-52
 
 Outcome:
 
-AetherNet supports large-scale reproducible DTN research workflows.
+AetherNet supports scalable experiment generation, systematic sweeps, comparison artifacts, and paper-ready reproducibility.
+
+Status:
+
+```text
+planned
+```
 
 ---
 
-# 9. Recommended Documentation Strategy
+# 8. Recommended Documentation Strategy
 
-Future contributors should keep the following documents updated alongside code changes:
+The following documents should remain synchronized with code changes:
 
 ```text
 docs/system-sequence.md
 docs/architecture-phase-2.md
+docs/phase-2-whitepaper.md
 docs/phase-2-2-whitepaper.md
+docs/phase-3-4-whitepaper.md
 docs/roadmap.md
+README.md
 ```
 
-When moving into Phase-3, it may be useful to also add:
+Recommended documentation roles:
 
-```text
-docs/phase-3-routing-whitepaper.md
-docs/routing-policy-design.md
-```
+- `README.md` → high-level repository entry point
+- `docs/roadmap.md` → wave sequencing, milestones, next priorities
+- `docs/system-sequence.md` → runtime lifecycle and execution path
+- `docs/phase-3-4-whitepaper.md` → handoff-grade architecture + completed routing / resilience summary
 
 ---
 
-# 10. Recommended Development Rules for Future Waves
+# 9. Recommended Development Rules for Future Waves
 
 For every future Wave:
 
 ## Always include
 
-* unit tests
-* deterministic behavior
-* narrow scope
-* module-level documentation updates
+- unit tests
+- deterministic behavior
+- narrow scope
+- module-level documentation updates
+- explicit backward-compatibility notes
 
 ## Prefer
 
-* helper-level changes before runtime-level changes
-* policy layers before hard-coded logic
-* experimentability before cleverness
+- helper-level changes before runtime-level changes
+- additive APIs before interface breakage
+- observability before complexity
+- policy comparison value over novelty for its own sake
 
 ## Avoid
 
-* large cross-module refactors
-* premature optimization
-* schema churn without strong reason
-* mixing transport changes with routing changes in the same Wave
+- large cross-module refactors
+- premature optimization
+- schema churn without strong reason
+- mixing transport changes with routing changes in the same Wave
+- introducing probabilistic behavior before the deterministic baseline is fully documented
 
 ---
 
-# 11. Summary
+# 10. Summary
 
-AetherNet has already completed the transport and observability foundation needed for serious DTN research.
+AetherNet has completed the transition from **transport baseline** into a **routing + resilience experimentation core**.
+
+The system now supports:
+
+```text
+fragmentation / reassembly
+store-carry-forward
+static routing
+contact-aware routing
+route scoring
+CGR-lite
+routing observability
+finite storage
+QoS aging
+storage pressure modeling
+opportunistic hold-vs-forward
+failure / partition modeling
+bounded multi-path candidate selection
+```
 
 The next recommended roadmap is:
 
 ```text
-Phase-3
-Routing policy framework
-Static routing
-Contact-aware routing
-Route scoring
-CGR-lite
-Routing metrics
+Phase-5
+scenario generation
+parameter sweeps
+routing comparison framework
+paper-ready experiment pipeline
 ```
 
-After that, AetherNet should evolve into a richer DTN research environment supporting:
-
-```text
-congestion
-QoS
-storage pressure
-failure modeling
-opportunistic routing
-multipath forwarding
-large experiment sweeps
-paper-ready reproducible outputs
-```
-
-The long-term goal is clear:
+The long-term goal remains clear:
 
 > AetherNet should evolve from a deterministic DTN simulator into a modular space-network research platform.
-
----
