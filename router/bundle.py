@@ -45,6 +45,9 @@ class Bundle:
     # Wave-29 additive custody transfer metadata
     custody_requested: bool = False
     custody_holder: Optional[str] = None
+    
+    # Wave-30 additive retransmission metadata
+    retransmission_count: int = 0
 
     def __post_init__(self) -> None:
         if not self.id.strip():
@@ -75,6 +78,9 @@ class Bundle:
                 raise ValueError("Fragment bundles must define total_fragments > 0.")
             if self.fragment_index >= self.total_fragments:
                 raise ValueError("fragment_index must be less than total_fragments.")
+                
+        if self.retransmission_count < 0:
+            raise ValueError("retransmission_count must be >= 0.")
 
     def is_expired(self, current_time: int) -> bool:
         """A bundle is expired when elapsed time is greater than or equal to ttl_sec."""
