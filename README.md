@@ -2,6 +2,7 @@
 
 **A Secure Delay-Tolerant Distributed Infrastructure Prototype for Space Networks**
 
+> **🟩Status:** Phase-2 Transport Layer (Fragmentation + Reassembly) implemented.
 
 ![Aether Cover](/img/cover.png)
 ## Project Purpose
@@ -46,7 +47,9 @@ flowchart LR
     DS -. timing data .-> RP
 ```
 
-## Data Flow Example
+> Phase-2 adds deterministic fragmentation and destination-side reassembly to the transport pipeline.
+
+## High Level Data Flow Example
 
 The following sequence demonstrates how Strict Priority and Store-Carry-Forward mechanisms interact across intermittent contact windows:
 
@@ -72,6 +75,38 @@ sequenceDiagram
     R->>G: Deliver tel-002
     R->>G: Deliver sci-001
 ```
+
+## Phase-2 Transport Lifecycle
+
+In Phase-2, AetherNet extends the DTN pipeline to support **bundle fragmentation and reassembly**, allowing large bundles to traverse multi-hop paths across intermittent contact windows.
+
+The simplified lifecycle is:
+
+```
+Bundle Created
+↓
+Fragmentation
+↓
+Strict Priority Queue
+↓
+DTN Store
+↓
+Contact Window Opens
+↓
+Multi-hop Forwarding
+↓
+Fragment Buffering
+↓
+Reassembly
+↓
+Bundle Delivered
+```
+
+
+This lifecycle models how bundles survive disconnections and traverse the network using **store-carry-forward routing**.
+
+For the full system-level sequence diagram and detailed explanation, see: `docs/system-sequence.md`
+
 
 ## Repository Structure
 ```mermaid
@@ -204,3 +239,40 @@ See:
 - `docs/artifacts.md`
 
 ---
+
+
+## Project Status
+
+AetherNet currently consists of two major development phases.
+
+### Phase-1 (Core DTN Simulator)
+
+Phase-1 implemented the foundational DTN architecture:
+
+* bundle lifecycle model
+* strict priority scheduling
+* store-carry-forward routing
+* contact-aware transmission windows
+* multi-hop relay simulation
+* metrics and reporting infrastructure
+
+These capabilities allow AetherNet to simulate basic delay-tolerant routing across intermittent contact windows.
+
+### Phase-2 (Fragmentation & Reassembly)
+
+Phase-2 extends the simulator with transport-layer realism:
+
+* deterministic bundle fragmentation
+* fragment metadata tracking
+* fragment buffering at destination nodes
+* automatic bundle reassembly
+* integration with simulator delivery lifecycle
+
+This enables the simulator to model the transport of large bundles across constrained contact windows.
+
+Technical details of Phase-2 can be found in:
+
+```
+docs/phase-2-whitepaper.md
+```
+
