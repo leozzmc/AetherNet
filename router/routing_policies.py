@@ -21,7 +21,10 @@ class LegacyRoutingPolicy:
 
 
 class StaticRoutingPolicy:
-    """Route lookup backed by the existing deterministic RoutingTable."""
+    """
+    Wave-38: Baseline routing policy backed by the existing deterministic RoutingTable.
+    Explicitly defines destination arrival and no-route semantics.
+    """
 
     def __init__(self, routing_table: RoutingTable):
         self.routing_table = routing_table
@@ -32,4 +35,13 @@ class StaticRoutingPolicy:
         bundle: Bundle,
         current_time: int,
     ) -> Optional[str]:
+        # 1. Arrival semantics: Do not forward if we are already at the destination
+        if current_node == bundle.destination:
+            return None
+
+        # 2. Override semantics: Explicit pinned next_hop takes absolute precedence
+        if bundle.next_hop:
+            return bundle.next_hop
+
+        # 3. Table lookup semantics: Returns None implicitly if route/source is unknown
         return self.routing_table.get_next_hop(current_node, bundle.destination)
