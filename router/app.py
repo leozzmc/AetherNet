@@ -11,12 +11,13 @@ from router.routing_policies import LegacyRoutingPolicy, StaticRoutingPolicy
 from router.routing_policy import RoutingPolicy
 from router.store_capacity import StoreCapacityController
 from routing.routing_table import RoutingTable
+from router.replication import ReplicationConfig, ReplicationPlanner, ReplicationPlan
 
 
 class AetherRouter:
     """
     Minimal coordinator for routing-policy, contact-plan checks, node storage, 
-    and hardware failure modeling.
+    hardware failure modeling, and replication planning.
     """
 
     def __init__(
@@ -27,6 +28,7 @@ class AetherRouter:
         store_capacity_bytes: Optional[int] = None,
         eviction_policy: Optional[EvictionPolicy] = None,
         failure_model: Optional[FailureModel] = None,
+        replication_config: Optional[ReplicationConfig] = None,
     ):
         self.cm = contact_manager
         self.routing_table = routing_table
@@ -41,6 +43,9 @@ class AetherRouter:
         
         # Wave-47: Hardware Failure & Partition Modeling
         self.failure_model = failure_model
+        
+        # Wave-49: Replication Control Framework
+        self.replication_config = replication_config or ReplicationConfig()
 
     @staticmethod
     def _default_policy(routing_table: Optional[RoutingTable]) -> RoutingPolicy:
@@ -82,11 +87,9 @@ class AetherRouter:
         if not next_node or next_node == current_node:
             return False
             
-        # Standard Contact Plan Check
         if not self.cm.is_forwarding_allowed(current_node, next_node, current_time):
             return False
             
-        # Wave-47: Hardware Failure Check (Runtime Gate)
         if self.failure_model and not self.failure_model.is_forwarding_permitted(current_node, next_node, current_time):
             return False
             
@@ -97,12 +100,29 @@ class AetherRouter:
         if not next_node or next_node == current_node:
             return False
             
-        # Standard Contact Plan Check
         if not self.cm.is_forwarding_allowed(current_node, next_node, current_time):
             return False
             
-        # Wave-47: Hardware Failure Check (Runtime Gate)
         if self.failure_model and not self.failure_model.is_forwarding_permitted(current_node, next_node, current_time):
             return False
             
         return True
+
+    def get_replication_plan(self, current_node: str, bundle: Bundle, current_time: int) -> ReplicationPlan:
+        """
+        Wave-49: Generates a deterministic replication plan based on the routing policy
+        and the node's replication configuration. 
+        This separates the PLANNING of replication from the EXECUTION of transmission.
+        """
+        decision = self.routing_policy.evaluate_decision(current_node, bundle, current_time)
+        
+        candidate_hops = []
+        if hasattr(self.routing_policy, "select_next_hops"):
+            # If the policy supports multipath candidate generation, extract them
+            candidate_hops = self.routing_policy.select_next_hops(current_node, bundle, current_time)
+            
+        return ReplicationPlanner.build_plan(
+            decision=decision,
+            candidate_hops=candidate_hops,
+            config=self.replication_config
+        )

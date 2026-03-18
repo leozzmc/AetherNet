@@ -61,6 +61,58 @@ It is designed for:
 - deterministic failure / partition modeling
 - bounded multi-path candidate selection
 
+## Built-in Reference Scenarios
+
+AetherNet ships with deterministic reference scenarios that are used for baseline validation, README examples, and regression testing.
+
+### `default_multihop`
+
+Baseline multi-hop forwarding scenario.
+
+Purpose:
+
+- validate store-carry-forward delivery across multiple hops
+- demonstrate the default deterministic forwarding path
+- serve as the simplest end-to-end reference scenario
+
+Typical behavior:
+
+- bundle is created at the source
+- forwarded through one or more relay nodes
+- successfully delivered to the destination if contacts remain available
+
+### `delayed_delivery`
+
+Contact-delayed forwarding scenario.
+
+Purpose:
+
+- validate that bundles are held when no current contact is open
+- demonstrate delayed forwarding once a future contact becomes available
+- confirm that the simulator preserves deterministic hold-then-forward behavior
+
+Typical behavior:
+
+- bundle is generated before the required link opens
+- router/store holds the bundle
+- delivery occurs later when the scheduled contact window becomes active
+
+### `expiry_before_contact`
+
+TTL-expiry-before-contact scenario.
+
+Purpose:
+
+- validate that expired bundles are not forwarded
+- confirm that TTL enforcement remains deterministic
+- demonstrate expiration behavior when delivery opportunities arrive too late
+
+Typical behavior:
+
+- bundle is created with a TTL shorter than the next usable contact
+- bundle remains undelivered
+- simulator marks the bundle as expired before forwarding can occur
+
 ---
 
 ## Repository Mental Model
@@ -77,7 +129,6 @@ Phase-5            = planned experiment scalability layer
 ---
 
 ## Architecture Overview
-
 
 AetherNet models a delay-tolerant multi-hop path across a simplified reference topology:
 
@@ -109,6 +160,10 @@ flowchart LR
     DS -. timing data .-> RP
 ```
 
+For additional architecture documentation, see:
+
+- `docs/architecture.md`
+- `docs/system-sequence.md`
 
 ## High-Level Architecture
 
