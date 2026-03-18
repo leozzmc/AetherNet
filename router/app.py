@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import List, Optional
 
 from metrics.congestion_metrics import CongestionMetrics
+from metrics.delivery_metrics import DeliveryMetrics
 from router.bundle import Bundle
 from router.contact_manager import ContactManager
 from router.deduplication import BundleDeduplicator, DeduplicationConfig
@@ -18,7 +19,7 @@ from routing.routing_table import RoutingTable
 class AetherRouter:
     """
     Minimal coordinator for routing-policy, contact-plan checks, node storage,
-    hardware failure modeling, replication planning, and deduplication.
+    hardware failure modeling, replication planning, deduplication, and delivery accounting.
     """
 
     def __init__(
@@ -31,6 +32,7 @@ class AetherRouter:
         failure_model: Optional[FailureModel] = None,
         replication_config: Optional[ReplicationConfig] = None,
         deduplication_config: Optional[DeduplicationConfig] = None,
+        delivery_metrics: Optional[DeliveryMetrics] = None,
     ):
         self.cm = contact_manager
         self.routing_table = routing_table
@@ -51,6 +53,9 @@ class AetherRouter:
 
         # Wave-50: Bundle Deduplication Framework
         self.deduplicator = BundleDeduplicator(deduplication_config or DeduplicationConfig())
+
+        # Wave-51: Delivery Accounting Framework
+        self.delivery_metrics = delivery_metrics or DeliveryMetrics()
 
     @staticmethod
     def _default_policy(routing_table: Optional[RoutingTable]) -> RoutingPolicy:
@@ -82,6 +87,15 @@ class AetherRouter:
         self.congestion_metrics.update_store_bytes(current_bytes)
 
         return dropped
+
+    def deliver_bundle(self, bundle: Bundle, current_time: int) -> str:
+        """
+        Record a final delivery event for a bundle.
+
+        This method is intentionally small and side-effect-limited:
+        it only updates delivery accounting.
+        """
+        return self.delivery_metrics.record_delivery(bundle.id, current_time)
 
     def get_next_hop(self, current_node: str, destination: str, current_time: int = 0) -> str | None:
         bundle = Bundle(
