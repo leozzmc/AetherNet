@@ -8,7 +8,7 @@ from router.routing_decision import RoutingDecision
 class ReplicationConfig:
     """
     Wave-49: Immutable configuration for replication control.
-    Keeps default behavior strictly single-path (disabled).
+    Defaults preserve existing single-path behavior.
     """
     enabled: bool = False
     mode: str = "bounded"
@@ -18,7 +18,7 @@ class ReplicationConfig:
 @dataclass(frozen=True)
 class ReplicaTarget:
     """
-    Describes a single intended hop for a bundle replica.
+    Describes one intended forwarding target in a replication plan.
     """
     next_hop: str
     is_primary: bool
@@ -28,8 +28,9 @@ class ReplicaTarget:
 @dataclass(frozen=True)
 class ReplicationPlan:
     """
-    A deterministic execution plan for forwarding a bundle.
-    Separates the INTENT to replicate from the actual RUNTIME copying.
+    Deterministic replication plan.
+
+    This is a planning abstraction only. It does not execute replication.
     """
     enabled: bool
     primary_target: Optional[ReplicaTarget]
@@ -37,59 +38,66 @@ class ReplicationPlan:
 
     @property
     def total_copies(self) -> int:
-        primary_count = 1 if self.primary_target else 0
+        primary_count = 1 if self.primary_target is not None else 0
         return primary_count + len(self.replica_targets)
 
 
 class ReplicationPlanner:
     """
-    Wave-49: Pure, deterministic helper to build replication plans.
-    Does NOT mutate bundle state or execute forwarding.
+    Wave-49: Pure deterministic helper for constructing replication plans.
     """
 
     @staticmethod
     def build_plan(
         decision: RoutingDecision,
         candidate_hops: List[str],
-        config: ReplicationConfig
+        config: ReplicationConfig,
     ) -> ReplicationPlan:
-        
-        # Fallback 1: Replication is disabled or no primary route exists
-        if not config.enabled or not decision.next_hop:
-            primary = ReplicaTarget(decision.next_hop, True, 0) if decision.next_hop else None
+        # No selected route -> no copies
+        if decision.next_hop is None:
+            return ReplicationPlan(
+                enabled=config.enabled,
+                primary_target=None,
+                replica_targets=[],
+            )
+
+        primary = ReplicaTarget(
+            next_hop=decision.next_hop,
+            is_primary=True,
+            rank=0,
+        )
+
+        # Backward-compatible default: no extra replicas
+        if not config.enabled or config.max_replicas <= 1:
             return ReplicationPlan(
                 enabled=config.enabled,
                 primary_target=primary,
-                replica_targets=[]
+                replica_targets=[],
             )
 
-        # Fallback 2: Replication is enabled, but max_replicas restricts to 1
-        if config.max_replicas <= 1:
-            primary = ReplicaTarget(decision.next_hop, True, 0)
-            return ReplicationPlan(
-                enabled=True,
-                primary_target=primary,
-                replica_targets=[]
-            )
-
-        primary = ReplicaTarget(decision.next_hop, True, 0)
-        replicas = []
-        seen_hops = {decision.next_hop}
-        rank = 1
-
-        # We can only add (max_replicas - 1) additional targets
         max_additional = config.max_replicas - 1
+        replicas: List[ReplicaTarget] = []
+        seen = {decision.next_hop}
+        next_rank = 1
 
         for hop in candidate_hops:
             if len(replicas) >= max_additional:
                 break
-            if hop not in seen_hops:
-                replicas.append(ReplicaTarget(hop, False, rank))
-                seen_hops.add(hop)
-                rank += 1
+            if hop in seen:
+                continue
+
+            replicas.append(
+                ReplicaTarget(
+                    next_hop=hop,
+                    is_primary=False,
+                    rank=next_rank,
+                )
+            )
+            seen.add(hop)
+            next_rank += 1
 
         return ReplicationPlan(
             enabled=True,
             primary_target=primary,
-            replica_targets=replicas
+            replica_targets=replicas,
         )
