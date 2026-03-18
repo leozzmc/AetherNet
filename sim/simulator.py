@@ -51,7 +51,7 @@ class Simulator:
         metrics: Optional[MetricsCollector] = None,
         scenario_name: str = "custom",
         injected_bundle_ids: Optional[List[str]] = None,
-        extra_queues: Optional[Dict[str, StrictPriorityQueue]] = None, # Wave-21 Additive parameter
+        extra_queues: Optional[Dict[str, StrictPriorityQueue]] = None,  # Wave-21 Additive parameter
     ) -> None:
         if isinstance(router_or_contact_manager, ContactManager):
             self.contact_manager = router_or_contact_manager
@@ -101,14 +101,15 @@ class Simulator:
         if extra_queues:
             for node_id, q in extra_queues.items():
                 self.nodes[node_id] = NodeRuntime(node_id, q, role="extra_relay")
+
         # Wave-25: Destination-side reassembly buffers mapped by node_id
-        self.reassembly_buffers: Dict[str, ReassemblyBuffer] = {}      
-                
+        self.reassembly_buffers: Dict[str, ReassemblyBuffer] = {}
+
     def _get_reassembly_buffer(self, node_id: str) -> ReassemblyBuffer:
         if node_id not in self.reassembly_buffers:
             self.reassembly_buffers[node_id] = ReassemblyBuffer()
         return self.reassembly_buffers[node_id]
-    
+
     @property
     def node_queues(self) -> Dict[str, StrictPriorityQueue]:
         """
@@ -239,8 +240,6 @@ class Simulator:
         print(f"[t={current_time:02d}] forwarding {bundle.type} {bundle.id} to {next_hop}")
 
         ForwardingEngine.complete_forward(bundle, current_node)
-
-        ForwardingEngine.complete_forward(bundle, current_node)
         self.store.save_bundle(bundle)
 
         # Wave-21 & Wave-25 Integration: Final hop logic
@@ -250,28 +249,30 @@ class Simulator:
                     bundle.transition(BundleStatus.FORWARDING)
                 if bundle.status == BundleStatus.FORWARDING:
                     bundle.transition(BundleStatus.DELIVERED)
-            
+
             # Wave-25: Intercept fragments at destination
             if bundle.is_fragment and bundle.original_bundle_id:
                 buffer = self._get_reassembly_buffer(bundle.destination)
                 buffer.add(bundle)
-                
+
                 # Check if we have a complete set
                 fragment_group = buffer.get(bundle.original_bundle_id)
                 if can_reassemble(fragment_group):
                     full_bundle = reassemble_bundle(fragment_group)
                     buffer.remove(bundle.original_bundle_id)
-                    
+
                     # Store and record the reassembled bundle
                     full_bundle.transition(BundleStatus.DELIVERED)
                     self.store.save_bundle(full_bundle)
                     self.metrics.record_delivered(full_bundle.type)
+                    self.router.deliver_bundle(full_bundle, current_time)
                     self.delivered_bundle_ids.append(full_bundle.id)
                     self._record_timeline_event(full_bundle.id, "delivered_tick", current_time)
                     print(f"[t={current_time:02d}] REASSEMBLED {full_bundle.id} from fragments at {bundle.destination}")
             else:
                 # Normal bundle delivery
                 self.metrics.record_delivered(bundle.type)
+                self.router.deliver_bundle(bundle, current_time)
                 self.delivered_bundle_ids.append(bundle.id)
                 self._record_timeline_event(bundle.id, "delivered_tick", current_time)
                 print(f"[t={current_time:02d}] {bundle.id} delivered to {bundle.destination}")
@@ -289,7 +290,7 @@ class Simulator:
         # Predictable topological sort for standard scenarios to allow same-tick multi-hop behaviors.
         # This prevents breaking existing timelines where lunar->relay->ground happens instantly.
         processing_order = ["lunar-node", "relay-a", "relay-b", "leo-relay"]
-        
+
         # Safely append any unexpected nodes dynamically injected via extra_queues
         for node in self.node_queues:
             if node not in processing_order:
