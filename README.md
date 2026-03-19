@@ -2,8 +2,12 @@
 
 **A Secure Delay-Tolerant Distributed Infrastructure Prototype for Space Networks**
 
-> **Current status:** Phase-4 baseline completed.  
-> AetherNet now includes transport reliability, routing intelligence, storage-pressure modeling, opportunistic routing, failure / partition modeling, and bounded multi-path candidate selection.
+> Current Status: finish part of phase-5,
+> Next Steps:
+>
+> - Wave-59 (comparison artifacts)
+> - Security S-Waves
+> - parameter sweeps
 
 ![Aether Cover](/img/cover.png)
 
