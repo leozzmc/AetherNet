@@ -13,22 +13,22 @@ from sim.simulator import create_default_simulator
 @dataclass(frozen=True)
 class ExperimentCase:
     """
-    Wave-52: Deterministic description of one experiment run.
-
-    This wave intentionally keeps the case model narrow and explicit.
-    It focuses on repeatable scenario execution, not a full experiment DSL.
+    Deterministic description of one experiment run.
     """
+
     case_name: str
     scenario_name: str
     tick_size: int = 1
     simulation_end_override: Optional[int] = None
+    routing_mode: Optional[str] = None
 
 
 @dataclass(frozen=True)
 class ExperimentResult:
     """
-    Wave-52: Deterministic summary of one completed experiment run.
+    Deterministic summary of one completed experiment run.
     """
+
     case_name: str
     scenario_name: str
     final_metrics: Dict[str, Any]
@@ -38,17 +38,12 @@ class ExperimentResult:
     unique_delivered: int
     duplicate_deliveries: int
     bundles_dropped_total: Any
+    routing_mode: str = "baseline"
 
 
 class ExperimentHarness:
     """
-    Wave-52: Deterministic, sequential experiment runner.
-
-    Design constraints:
-    - preserves input case order
-    - uses existing scenario + simulator machinery
-    - avoids deep simulator refactors
-    - keeps execution single-threaded and explicit
+    Deterministic, sequential experiment runner.
     """
 
     @staticmethod
@@ -59,9 +54,9 @@ class ExperimentHarness:
             try:
                 profile = get_scenario(case.scenario_name)
             except ValueError as exc:
-                raise ValueError(
-                    f"ExperimentCase '{case.case_name}' failed: {exc}"
-                ) from exc
+                raise ValueError(f"ExperimentCase '{case.case_name}' failed: {exc}") from exc
+
+            resolved_routing_mode = case.routing_mode or profile.routing_mode
 
             with tempfile.NamedTemporaryFile(mode="w", delete=False, encoding="utf-8") as plan_file:
                 json.dump(profile.generate_plan(), plan_file)
@@ -76,6 +71,7 @@ class ExperimentHarness:
                         inject_short_lived=profile.inject_short_lived_bundle,
                         tick_size=case.tick_size,
                         simulation_end_override=case.simulation_end_override,
+                        routing_mode=resolved_routing_mode,
                     )
 
                     report = simulator.run()
@@ -88,10 +84,11 @@ class ExperimentHarness:
                             final_metrics=final_metrics,
                             delivered_bundle_ids=list(report.get("delivered_bundle_ids", [])),
                             store_bundle_ids_remaining=list(report.get("store_bundle_ids_remaining", [])),
-                            delivery_ratio=final_metrics.get("delivery_ratio", 0.0),
-                            unique_delivered=final_metrics.get("unique_delivered", 0),
-                            duplicate_deliveries=final_metrics.get("duplicate_deliveries", 0),
+                            delivery_ratio=float(final_metrics.get("delivery_ratio", 0.0)),
+                            unique_delivered=int(final_metrics.get("unique_delivered", 0)),
+                            duplicate_deliveries=int(final_metrics.get("duplicate_deliveries", 0)),
                             bundles_dropped_total=final_metrics.get("bundles_dropped_total", {}),
+                            routing_mode=report.get("routing_mode", resolved_routing_mode),
                         )
                     )
             finally:
@@ -111,6 +108,7 @@ class ExperimentHarness:
                 {
                     "case_name": result.case_name,
                     "scenario_name": result.scenario_name,
+                    "routing_mode": result.routing_mode,
                     "delivery_ratio": result.delivery_ratio,
                     "unique_delivered": result.unique_delivered,
                     "duplicate_deliveries": result.duplicate_deliveries,

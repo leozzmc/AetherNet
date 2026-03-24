@@ -46,10 +46,12 @@ def test_results_include_harness_delivery_fields():
     assert hasattr(result, "delivery_ratio")
     assert hasattr(result, "unique_delivered")
     assert hasattr(result, "duplicate_deliveries")
+    assert hasattr(result, "routing_mode")
 
     assert isinstance(result.delivery_ratio, float)
     assert isinstance(result.unique_delivered, int)
     assert isinstance(result.duplicate_deliveries, int)
+    assert isinstance(result.routing_mode, str)
 
     assert isinstance(result.final_metrics, dict)
     assert isinstance(result.delivered_bundle_ids, list)
@@ -70,6 +72,7 @@ def test_summary_helper_produces_stable_comparison_output():
 
     first_case = summary["cases"][0]
     assert "scenario_name" in first_case
+    assert "routing_mode" in first_case
     assert "delivery_ratio" in first_case
     assert "unique_delivered" in first_case
     assert "duplicate_deliveries" in first_case
@@ -89,3 +92,24 @@ def test_invalid_scenario_name_raises_value_error():
         message = str(exc)
         assert "bad-case" in message
         assert "failed" in message
+
+
+def test_routing_mode_override_is_propagated_to_results_and_summary():
+    cases = [
+        ExperimentCase(
+            case_name="contact-aware-case",
+            scenario_name="default_multihop",
+            routing_mode="contact_aware",
+        ),
+        ExperimentCase(
+            case_name="multipath-case",
+            scenario_name="default_multihop",
+            routing_mode="multipath",
+        ),
+    ]
+
+    results = ExperimentHarness.run_experiments(cases)
+    summary = ExperimentHarness.generate_summary(results)
+
+    assert [result.routing_mode for result in results] == ["contact_aware", "multipath"]
+    assert [case["routing_mode"] for case in summary["cases"]] == ["contact_aware", "multipath"]

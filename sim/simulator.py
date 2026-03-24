@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import List, Tuple, Optional, Dict, Any
 from collections import defaultdict
 
+
 from router.bundle import Bundle, BundleStatus
 from router.contact_manager import ContactManager, Contact
 from router.app import AetherRouter
@@ -15,6 +16,7 @@ from store.store import DTNStore
 from store.retention import expired_bundle_ids, purge_expired
 from sim.event_loop import SimulationClock
 from metrics.exporter import MetricsCollector
+from metrics.delivery_metrics import DeliveryMetrics
 from sim.scenarios import get_scenario
 from sim.reporting import write_json_report
 from link.capacity_manager import ContactWindowCapacityManager
@@ -26,6 +28,9 @@ from metrics.network_metrics import (
 from node.node_runtime import NodeRuntime
 from protocol.reassembly_buffer import ReassemblyBuffer
 from protocol.reassembly import can_reassemble, reassemble_bundle
+from router.route_scoring import RouteCandidate
+from router.routing_policies import StaticRoutingPolicy, ContactAwareRoutingPolicy, MultiPathRoutingPolicy
+from routing.routing_table import RoutingTable
 
 
 RETENTION_INTERVAL = 5
@@ -52,6 +57,7 @@ class Simulator:
         scenario_name: str = "custom",
         injected_bundle_ids: Optional[List[str]] = None,
         extra_queues: Optional[Dict[str, StrictPriorityQueue]] = None,  # Wave-21 Additive parameter
+        routing_mode: str = "baseline",
     ) -> None:
         if isinstance(router_or_contact_manager, ContactManager):
             self.contact_manager = router_or_contact_manager
@@ -88,8 +94,8 @@ class Simulator:
         self.clock = clock
         self.metrics = metrics if metrics is not None else MetricsCollector()
         self.scenario_name = scenario_name
-        self.lunar_link_up = False
-        self.relay_link_up = False
+        self.routing_mode = routing_mode
+        self._contact_log_state: Dict[tuple[str, str], bool] = {}
         self.delivered_bundle_ids: List[str] = []
         self.injected_bundle_ids: List[str] = sorted(injected_bundle_ids or [])
         self.bundle_timelines: Dict[str, Dict[str, int]] = defaultdict(dict)
@@ -125,21 +131,19 @@ class Simulator:
             self.bundle_timelines[bundle_id][event_key] = current_time
 
     def _update_link_logs(self, current_time: int) -> None:
-        lunar_up = self.router.can_forward_destination("lunar-node", "ground-station", current_time)
-        relay_up = self.router.can_forward_destination("leo-relay", "ground-station", current_time)
+        active_pairs = {(contact.source, contact.target) for contact in self.contact_manager.get_active_contacts(current_time)}
+        all_pairs = {(contact.source, contact.target) for contact in self.contact_manager.contacts}
 
-        if lunar_up and not self.lunar_link_up:
-            print(f"[t={current_time:02d}] link up: lunar-node -> leo-relay")
-        elif not lunar_up and self.lunar_link_up:
-            print(f"[t={current_time:02d}] link down: lunar-node -> leo-relay")
+        for source, target in sorted(all_pairs):
+            is_active = (source, target) in active_pairs
+            was_active = self._contact_log_state.get((source, target), False)
 
-        if relay_up and not self.relay_link_up:
-            print(f"[t={current_time:02d}] link up: leo-relay -> ground-station")
-        elif not relay_up and self.relay_link_up:
-            print(f"[t={current_time:02d}] link down: leo-relay -> ground-station")
+            if is_active and not was_active:
+                print(f"[t={current_time:02d}] link up: {source} -> {target}")
+            elif was_active and not is_active:
+                print(f"[t={current_time:02d}] link down: {source} -> {target}")
 
-        self.lunar_link_up = lunar_up
-        self.relay_link_up = relay_up
+            self._contact_log_state[(source, target)] = is_active
 
     def _apply_retention(self, current_time: int) -> None:
         if current_time <= 0 or current_time % RETENTION_INTERVAL != 0:
@@ -194,36 +198,77 @@ class Simulator:
 
         return None
 
-    def _process_hop(self, current_node: str, outbound_queue: StrictPriorityQueue, current_time: int) -> Optional[Bundle]:
-        if outbound_queue.size() == 0:
+    def _routing_table_next_hop(self, current_node: str, destination: str) -> Optional[str]:
+        routing_table = getattr(self.router, "routing_table", None)
+        if routing_table is None:
             return None
+
+        get_next_hop = getattr(routing_table, "get_next_hop", None)
+        if callable(get_next_hop):
+            return get_next_hop(current_node, destination)
+
+        return None
+
+    def _resolve_next_hop_and_contact(
+        self,
+        current_node: str,
+        destination: str,
+        current_time: int,
+    ) -> Tuple[Optional[str], Optional[Contact]]:
+        next_hop = self.router.get_next_hop(current_node, destination, current_time=current_time)
+        if next_hop == current_node:
+            next_hop = None
+
+        contact = self._find_matching_contact(current_node, next_hop, current_time)
+        if contact is not None:
+            if next_hop is None:
+                next_hop = contact.target if contact.source == current_node else contact.source
+            return next_hop, contact
+
+        fallback_hop = self._routing_table_next_hop(current_node, destination)
+        if fallback_hop and fallback_hop != current_node:
+            contact = self._find_matching_contact(current_node, fallback_hop, current_time)
+            if contact is not None:
+                return fallback_hop, contact
+
+        # Baseline mode should remain faithful to the deterministic routing table.
+        # If the preferred static next hop is unavailable, baseline waits rather than
+        # opportunistically switching to a different active contact.
+        if self.routing_mode == "baseline":
+            return None, None
+
+        contact = self._find_matching_contact(current_node, None, current_time)
+        if contact is not None:
+            hop = contact.target if contact.source == current_node else contact.source
+            return hop, contact
+
+        return None, None
+
+    def _process_hop(
+        self,
+        current_node: str,
+        outbound_queue: StrictPriorityQueue,
+        current_time: int,
+    ) -> Tuple[Optional[Bundle], Optional[str]]:
+        if outbound_queue.size() == 0:
+            return None, None
 
         bundle = outbound_queue.peek(current_time)
         if bundle is None:
-            return None
+            return None, None
 
-        next_hop = self.router.get_next_hop(current_node, bundle.destination)
-        contact = self._find_matching_contact(current_node, next_hop, current_time)
-        if contact is None:
-            return None
-
-        # If policy could not resolve next hop, derive it from the matched contact
-        # for backward compatibility with older tests/scenarios.
-        if next_hop is None:
-            if contact.source == current_node:
-                next_hop = contact.target
-            else:
-                next_hop = contact.source
+        next_hop, contact = self._resolve_next_hop_and_contact(current_node, bundle.destination, current_time)
+        if contact is None or next_hop is None:
+            return None, None
 
         if not self.capacity_manager.can_forward(contact):
-            return None
+            return None, None
 
         bundle = outbound_queue.dequeue(current_time)
         if bundle is None:
-            return None
+            return None, None
 
-        # Defensive consistency check: the dequeued bundle should still map to the same next hop.
-        resolved_next_hop = self.router.get_next_hop(current_node, bundle.destination)
+        resolved_next_hop, _ = self._resolve_next_hop_and_contact(current_node, bundle.destination, current_time)
         if resolved_next_hop is not None and resolved_next_hop != next_hop:
             raise RuntimeError(
                 f"Queue head changed unexpectedly during forwarding decision at {current_node} "
@@ -281,7 +326,7 @@ class Simulator:
             self._record_timeline_event(bundle.id, "stored_tick", current_time)
             print(f"[t={current_time:02d}] {bundle.id} stored at {next_hop}")
 
-        return bundle
+        return bundle, next_hop
 
     def tick(self, current_time: int) -> None:
         self._update_link_logs(current_time)
@@ -301,11 +346,9 @@ class Simulator:
                 continue
 
             outbound_queue = self.node_queues[current_node]
-            moved_bundle = self._process_hop(current_node, outbound_queue, current_time)
+            moved_bundle, next_hop = self._process_hop(current_node, outbound_queue, current_time)
 
             if moved_bundle is not None and moved_bundle.status == BundleStatus.STORED:
-                # Wave-21: Use router abstraction to find the next hop queue
-                next_hop = self.router.get_next_hop(current_node, moved_bundle.destination)
                 if next_hop is not None and next_hop in self.node_queues:
                     self.node_queues[next_hop].enqueue(moved_bundle)
 
@@ -320,8 +363,16 @@ class Simulator:
         return self.build_final_report()
 
     def build_final_report(self) -> Dict[str, Any]:
-        store_remaining = sorted(self.store.list_bundle_ids())
         metrics_snap = self.metrics.snapshot()
+        metrics_snap.update(self.router.delivery_metrics.snapshot())
+
+        delivered_ids = set(self.delivered_bundle_ids)
+        purged_ids = set(metrics_snap.get("purged_bundle_ids", []))
+        store_remaining = sorted(
+            bundle_id
+            for bundle_id in self.store.list_bundle_ids()
+            if bundle_id not in delivered_ids and bundle_id not in purged_ids
+        )
 
         network_metrics = {
             "store_depth_final": compute_store_depth_final(self.store),
@@ -358,8 +409,103 @@ class Simulator:
             "recent_purged_ids": metrics_snap.get("recent_purged_ids", []),
             "queue_depths": metrics_snap.get("queue_depths", {}),
             "last_queue_depths": metrics_snap.get("last_queue_depths", {}),
+            "routing_mode": self.routing_mode,
         }
         return report
+
+
+def _normalize_routing_mode(routing_mode: Optional[str]) -> str:
+    normalized = (routing_mode or "baseline").strip().lower()
+    allowed = {"baseline", "contact_aware", "multipath"}
+    if normalized not in allowed:
+        raise ValueError(f"Unsupported routing_mode '{routing_mode}'. Allowed: {sorted(allowed)}")
+    return normalized
+
+
+def _score_path(path: List[Tuple[str, str, Contact, int]]) -> int:
+    latest_start = max(step[2].start_time for step in path)
+    total_delay_ms = sum(step[2].one_way_delay_ms for step in path)
+    bottleneck_bandwidth = min(step[2].bandwidth_kbit for step in path)
+    hop_penalty = len(path) * 100
+    return 1_000_000 - (latest_start * 1000) - total_delay_ms - hop_penalty + bottleneck_bandwidth
+
+
+def _derive_routing_artifacts(contacts: List[Contact]) -> Tuple[RoutingTable, Dict[str, Dict[str, List[RouteCandidate]]]]:
+    adjacency: Dict[str, List[Tuple[str, Contact, int]]] = defaultdict(list)
+    nodes = set()
+
+    for idx, contact in enumerate(contacts):
+        nodes.add(contact.source)
+        nodes.add(contact.target)
+        adjacency[contact.source].append((contact.target, contact, idx))
+        if contact.bidirectional:
+            adjacency[contact.target].append((contact.source, contact, idx))
+
+    def enumerate_paths(source: str, destination: str, max_hops: int = 4) -> List[List[Tuple[str, str, Contact, int]]]:
+        paths: List[List[Tuple[str, str, Contact, int]]] = []
+
+        def dfs(current: str, visited: set[str], path: List[Tuple[str, str, Contact, int]]) -> None:
+            if len(path) > max_hops:
+                return
+            if current == destination and path:
+                paths.append(list(path))
+                return
+            for neighbor, contact, order in adjacency.get(current, []):
+                if neighbor in visited:
+                    continue
+                path.append((current, neighbor, contact, order))
+                dfs(neighbor, visited | {neighbor}, path)
+                path.pop()
+
+        dfs(source, {source}, [])
+        return paths
+
+    routes: Dict[str, Dict[str, str]] = {}
+    candidate_routes: Dict[str, Dict[str, List[RouteCandidate]]] = {}
+
+    for source in sorted(nodes):
+        for destination in sorted(nodes):
+            if source == destination:
+                continue
+            paths = enumerate_paths(source, destination)
+            if not paths:
+                continue
+
+            best_baseline_path = min(
+                paths,
+                key=lambda path: (tuple(step[3] for step in path), len(path), path[0][1]),
+            )
+            routes.setdefault(source, {})[destination] = best_baseline_path[0][1]
+
+            best_by_hop: Dict[str, RouteCandidate] = {}
+            for path in paths:
+                first_hop = path[0][1]
+                candidate = RouteCandidate(next_hop=first_hop, score=_score_path(path))
+                existing = best_by_hop.get(first_hop)
+                if existing is None or candidate.score > existing.score:
+                    best_by_hop[first_hop] = candidate
+
+            candidate_routes.setdefault(source, {})[destination] = sorted(
+                best_by_hop.values(),
+                key=lambda c: (-c.score, c.next_hop),
+            )
+
+    return RoutingTable(routes), candidate_routes
+
+
+def _build_routing_policy(
+    routing_mode: str,
+    routing_table: RoutingTable,
+    candidate_routes: Dict[str, Dict[str, List[RouteCandidate]]],
+    contact_manager: ContactManager,
+):
+    if routing_mode == "baseline":
+        return StaticRoutingPolicy(routing_table)
+    if routing_mode == "contact_aware":
+        return ContactAwareRoutingPolicy(routing_table, contact_manager)
+    if routing_mode == "multipath":
+        return MultiPathRoutingPolicy(candidate_routes, contact_manager)
+    raise ValueError(f"Unsupported routing_mode '{routing_mode}'")
 
 
 def create_default_simulator(
@@ -369,9 +515,14 @@ def create_default_simulator(
     inject_short_lived: bool = False,
     tick_size: int = 1,
     simulation_end_override: Optional[int] = None,
+    routing_mode: Optional[str] = None,
 ) -> Tuple[Simulator, List[Bundle]]:
     cm = ContactManager(plan_path)
-    router_app = AetherRouter(cm)
+    with Path(plan_path).open("r", encoding="utf-8") as f:
+        raw_plan = json.load(f)
+
+    normalized_routing_mode = _normalize_routing_mode(routing_mode or raw_plan.get("routing_mode"))
+    routing_table, candidate_routes = _derive_routing_artifacts(cm.contacts)
     end_time = simulation_end_override if simulation_end_override is not None else cm.simulation_duration_sec
     clock = SimulationClock(start_time=0, end_time=end_time, tick_size=tick_size)
 
@@ -435,6 +586,28 @@ def create_default_simulator(
         lunar_queue.enqueue(bundle)
         store.save_bundle(bundle)
 
+    delivery_metrics = DeliveryMetrics(expected_total_bundles=len(demo_bundles))
+    router_policy = _build_routing_policy(
+        normalized_routing_mode,
+        routing_table,
+        candidate_routes,
+        cm,
+    )
+    router_app = AetherRouter(
+        cm,
+        routing_table=routing_table,
+        routing_policy=router_policy,
+        delivery_metrics=delivery_metrics,
+    )
+
+    intermediate_nodes = sorted({
+        node
+        for contact in cm.contacts
+        for node in (contact.source, contact.target)
+        if node not in {"lunar-node", "ground-station", "leo-relay"}
+    })
+    extra_queues = {node_id: StrictPriorityQueue() for node_id in intermediate_nodes}
+
     sim = Simulator(
         router_app,
         store,
@@ -444,6 +617,8 @@ def create_default_simulator(
         metrics,
         scenario_name=scenario_name,
         injected_bundle_ids=[b.id for b in demo_bundles],
+        extra_queues=extra_queues,
+        routing_mode=normalized_routing_mode,
     )
     return sim, demo_bundles
 
@@ -454,6 +629,7 @@ def main() -> None:
     parser.add_argument("--report-out", type=str, help="Path to save the final JSON report")
     parser.add_argument("--tick-size", type=int, default=1, help="Simulation tick size in seconds")
     parser.add_argument("--end-time", type=int, help="Override simulation end time")
+    parser.add_argument("--routing-mode", type=str, choices=["baseline", "contact_aware", "multipath"], help="Override routing mode")
     args = parser.parse_args()
 
     try:
@@ -475,6 +651,7 @@ def main() -> None:
                 inject_short_lived=profile.inject_short_lived_bundle,
                 tick_size=args.tick_size,
                 simulation_end_override=args.end_time,
+                routing_mode=args.routing_mode or profile.routing_mode,
             )
 
             print(f"🚀 Starting AetherNet Simulator | Scenario: {args.scenario}\n")

@@ -155,6 +155,52 @@ Purpose:
 
 ---
 
+### `multipath_competition`
+
+Parallel relay competition scenario (multi-path friendly).
+
+Topology:
+
+- `lunar-node -> relay-a`
+- `lunar-node -> relay-b`
+- only one relay has a valid downstream path within the simulation window
+
+Purpose:
+
+- demonstrate divergence between `baseline` and `multipath`
+- show that naive routing may select a dead-end relay
+- validate that multi-path candidate selection can recover correct delivery
+
+Expected behavior:
+
+- `baseline` → may fail (wrong relay)
+- `multipath` → succeeds (selects viable relay)
+
+---
+
+### `contact_timing_tradeoff`
+
+Timing-sensitive routing scenario.
+
+Topology:
+
+- multiple candidate paths exist
+- only one path has a **valid end-to-end contact timing chain**
+
+Purpose:
+
+- demonstrate `contact_aware` routing advantage
+- validate that routing decisions must consider future contact timing
+- show failure of naive shortest-path / static selection
+
+Expected behavior:
+
+- `baseline` → fails (chooses locally valid but globally broken path)
+- `contact_aware` → succeeds (chooses timing-valid path)
+- `multipath` → also succeeds (via redundancy / candidate evaluation)
+
+---
+
 ## Repository Mental Model
 
 ```text
@@ -397,11 +443,15 @@ source .venv/bin/activate
 make setup-dev
 ```
 
+---
+
 ### 2. Smoke validation
 
 ```bash
 make smoke
 ```
+
+---
 
 ### 3. Run a demo scenario
 
@@ -414,6 +464,60 @@ or:
 ```bash
 ./scripts/run_demo.sh
 ```
+
+### 3.1 Run specific scenario
+
+```bash
+python3 demo.py --scenario default_multihop
+```
+
+### 3.2 Override routing mode
+
+```bash
+python3 demo.py --scenario default_multihop --routing-mode baseline
+python3 demo.py --scenario default_multihop --routing-mode contact_aware
+python3 demo.py --scenario default_multihop --routing-mode multipath
+```
+
+### 3.3 Recommended demo sequences
+
+#### 1. Baseline DTN behavior
+
+```bash
+python3 demo.py
+```
+
+Demonstrates:
+
+- multi-hop delivery
+- delayed forwarding
+- TTL expiration
+
+#### 2. Multipath advantage
+
+```bash
+python3 demo.py --scenario multipath_competition --routing-mode baseline
+python3 demo.py --scenario multipath_competition --routing-mode multipath
+```
+
+Expected:
+
+- baseline fails
+- multipath succeeds
+
+#### 3. Contact-aware routing advantage
+
+```bash
+python3 demo.py --scenario contact_timing_tradeoff --routing-mode baseline
+python3 demo.py --scenario contact_timing_tradeoff --routing-mode contact_aware
+```
+
+Expected:
+
+- baseline fails
+- contact-aware succeeds
+
+---
 
 ### 4. Run all built-in comparisons
 
@@ -499,7 +603,3 @@ It supports:
 And is evolving toward:
 
 > intelligent, adaptive, and secure space networking systems
-
-```
-
-```

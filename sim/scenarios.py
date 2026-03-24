@@ -9,11 +9,13 @@ class ScenarioProfile:
     duration_sec: int
     contacts: List[Dict[str, Any]]
     inject_short_lived_bundle: bool = False
+    routing_mode: str = "baseline"
 
     def generate_plan(self) -> Dict[str, Any]:
         return {
             "simulation_duration_sec": self.duration_sec,
             "contacts": self.contacts,
+            "routing_mode": self.routing_mode,
         }
 
 
@@ -108,6 +110,110 @@ register_scenario(
                 "bandwidth_kbit": 256,
                 "bidirectional": False,
             }
+        ],
+    )
+)
+
+register_scenario(
+    ScenarioProfile(
+        name="multipath_competition",
+        description=(
+            "Two relays are simultaneously reachable from the lunar node, but only one path "
+            "offers a viable downstream contact within the simulation window. This scenario is "
+            "designed to highlight routing-mode differences."
+        ),
+        duration_sec=30,
+        inject_short_lived_bundle=False,
+        contacts=[
+            {
+                "source": "lunar-node",
+                "target": "relay-a",
+                "start_time": 5,
+                "end_time": 12,
+                "one_way_delay_ms": 120,
+                "bandwidth_kbit": 128,
+                "bidirectional": False,
+            },
+            {
+                "source": "lunar-node",
+                "target": "relay-b",
+                "start_time": 5,
+                "end_time": 12,
+                "one_way_delay_ms": 20,
+                "bandwidth_kbit": 2048,
+                "bidirectional": False,
+            },
+            {
+                "source": "relay-b",
+                "target": "ground-station",
+                "start_time": 15,
+                "end_time": 25,
+                "one_way_delay_ms": 20,
+                "bandwidth_kbit": 4096,
+                "bidirectional": False,
+            },
+            {
+                "source": "relay-a",
+                "target": "ground-station",
+                "start_time": 35,
+                "end_time": 45,
+                "one_way_delay_ms": 100,
+                "bandwidth_kbit": 256,
+                "bidirectional": False,
+            },
+        ],
+    )
+)
+
+
+register_scenario(
+    ScenarioProfile(
+        name="contact_timing_tradeoff",
+        description=(
+            "Two relays exist, but the baseline-preferred relay opens too late to complete the "
+            "end-to-end chain within the simulation window. The alternative relay is already open "
+            "and has a viable downstream contact, making this scenario useful for highlighting "
+            "contact-aware behavior."
+        ),
+        duration_sec=30,
+        inject_short_lived_bundle=False,
+        contacts=[
+            {
+                "source": "lunar-node",
+                "target": "relay-a",
+                "start_time": 15,
+                "end_time": 20,
+                "one_way_delay_ms": 120,
+                "bandwidth_kbit": 128,
+                "bidirectional": False,
+            },
+            {
+                "source": "lunar-node",
+                "target": "relay-b",
+                "start_time": 5,
+                "end_time": 10,
+                "one_way_delay_ms": 20,
+                "bandwidth_kbit": 2048,
+                "bidirectional": False,
+            },
+            {
+                "source": "relay-b",
+                "target": "ground-station",
+                "start_time": 12,
+                "end_time": 18,
+                "one_way_delay_ms": 20,
+                "bandwidth_kbit": 4096,
+                "bidirectional": False,
+            },
+            {
+                "source": "relay-a",
+                "target": "ground-station",
+                "start_time": 35,
+                "end_time": 45,
+                "one_way_delay_ms": 100,
+                "bandwidth_kbit": 256,
+                "bidirectional": False,
+            },
         ],
     )
 )
