@@ -159,6 +159,30 @@ Purpose:
 
 Parallel relay competition scenario (multi-path friendly).
 
+> In `multipath_competition` , both relays are reachable from the source, but only Relay B provides a viable downstream delivery path.
+
+```mermaid
+flowchart LR
+    L[Lunar Node]
+    RA[Relay A]
+    RB[Relay B]
+    G[Ground Station]
+
+    L -->|t=05..12| RA
+    L -->|t=05..12| RB
+
+    RA -. no downstream contact within window .-> G
+    RB -->|t=15..25 valid downstream contact| G
+
+    classDef good fill:#e8f5e9,stroke:#2e7d32,stroke-width:2px;
+    classDef bad fill:#ffebee,stroke:#c62828,stroke-width:2px;
+    classDef neutral fill:#eef3f8,stroke:#607d8b,stroke-width:1px;
+
+    class L,G neutral;
+    class RB good;
+    class RA bad;
+```
+
 Topology:
 
 - `lunar-node -> relay-a`
@@ -181,6 +205,30 @@ Expected behavior:
 ### `contact_timing_tradeoff`
 
 Timing-sensitive routing scenario.
+
+> In `contact_timing_tradeoff`, the earlier upstream contact through Relay B forms the only temporally valid end-to-end path. Baseline routing later commits to Relay A and misses the usable downstream chain.
+
+```mermaid
+flowchart LR
+    L[Lunar Node]
+    RA[Relay A]
+    RB[Relay B]
+    G[Ground Station]
+
+    L -->|t=05..10 upstream available| RB
+    RB -->|t=12..18 downstream available| G
+
+    L -->|t=15..20 upstream available| RA
+    RA -. no usable downstream contact in window .-> G
+
+    classDef good fill:#e8f5e9,stroke:#2e7d32,stroke-width:2px;
+    classDef bad fill:#ffebee,stroke:#c62828,stroke-width:2px;
+    classDef neutral fill:#eef3f8,stroke:#607d8b,stroke-width:1px;
+
+    class L,G neutral;
+    class RB good;
+    class RA bad;
+```
 
 Topology:
 
