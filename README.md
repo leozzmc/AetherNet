@@ -567,6 +567,34 @@ Expected:
 
 ---
 
+### 3.4 How to Interpret Demo Results (NEW)
+
+AetherNet demo scenarios are designed to expose **routing-policy differences under identical conditions**.
+
+Key principle:
+
+> Only the routing policy changes — everything else remains deterministic.
+
+Interpretation guideline:
+
+| Scenario                | What it tests                  | Expected divergence |
+| ----------------------- | ------------------------------ | ------------------- |
+| default_multihop        | DTN baseline correctness       | no difference       |
+| multipath_competition   | path selection under ambiguity | multipath wins      |
+| contact_timing_tradeoff | future-contact reasoning       | contact-aware wins  |
+
+If results do not match expectations:
+
+- routing policy may be incorrect
+- scenario may not be properly constructed
+- simulator fallback logic may be triggered
+
+---
+
+This section ensures that demo outputs are not just observed, but **correctly interpreted as routing behavior validation**.
+
+---
+
 ### 4. Run all built-in comparisons
 
 ```bash
