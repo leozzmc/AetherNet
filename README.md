@@ -166,28 +166,20 @@ Properties:
 
 AetherNet includes deterministic baseline scenarios for validation and demo.
 
----
-
 ### `default_multihop`
 
 * baseline DTN forwarding
 * multi-hop delivery validation
-
----
 
 ### `delayed_delivery`
 
 * validates hold-then-forward behavior
 * ensures deterministic delayed routing
 
----
-
 ### `expiry_before_contact`
 
 * validates TTL expiration
 * ensures strict lifecycle enforcement
-
----
 
 ### `multipath_competition`
 
@@ -198,8 +190,6 @@ Expected:
 
 * baseline → may fail
 * multipath → succeeds
-
----
 
 ### `contact_timing_tradeoff`
 
@@ -245,6 +235,12 @@ flowchart TB
     CONTEXT --> SCORE --> SIGNAL --> DECISION --> ART
 ```
 
+For additional architecture documentation, see:
+
+* `docs/architecture.md`
+* `docs/system-sequence.md`
+* `docs/system-sequence-phase-6.md`
+
 ---
 
 ## Runtime Lifecycle
@@ -288,9 +284,78 @@ flowchart LR
 
 ---
 
+## Core Source Areas
+
+### Routing / decision logic
+
+```text
+router/routing_policies.py
+router/contact_graph.py
+router/route_scoring.py
+router/routing_decision.py
+metrics/routing_metrics.py
+```
+
+### Storage / stress / resilience
+
+```text
+router/store_capacity.py
+router/eviction_policy.py
+router/qos.py
+router/failure_model.py
+metrics/congestion_metrics.py
+```
+
+### Transport / simulation
+
+```text
+protocol/
+sim/
+store/
+bundle_queue/
+```
+
+### Documentation / handoff
+
+```text
+README.md
+docs/roadmap.md
+docs/roadmap-phase-5.md
+docs/roadmap-phase-6.md
+docs/system-sequence.md
+docs/system-sequence-phase-5.md
+docs/system-sequence-phase-6.md
+docs/architecture.md
+docs/phase-2-whitepaper.md
+docs/phase-2-2-whitepaper.md
+docs/phase-3-4-whitepaper.md
+docs/phase-5-whitepaper.md
+docs/phase-6-whitepaper.md
+```
+
+### Phase-5 Research Source Areas
+
+```text
+sim/experiment_harness.py
+sim/parameter_sweep.py
+sim/sweep_aggregation.py
+sim/research_table_export.py
+sim/research_export_manifest.py
+sim/research_snapshot.py
+sim/research_snapshot_query.py
+sim/research_snapshot_compare.py
+sim/research_comparison_export.py
+sim/research_snapshot_registry.py
+sim/research_report.py
+```
+
+---
+
 ## How to Run
 
-### Setup
+### 1. Environment setup
+
+AetherNet requires Python 3.10+.
 
 ```bash
 python3 -m venv .venv
@@ -298,36 +363,82 @@ source .venv/bin/activate
 make setup-dev
 ```
 
----
+### 2. Smoke validation
 
-### Run demo
+```bash
+make smoke
+```
+
+### 3. Run demo
 
 ```bash
 make demo
 ```
 
----
+or:
 
-### Run specific scenario
+```bash
+./scripts/run_demo.sh
+```
+
+### 3.1 Run specific scenario
 
 ```bash
 python3 demo.py --scenario default_multihop
 ```
 
----
-
-### Compare routing policies
+### 3.2 Override routing mode
 
 ```bash
+python3 demo.py --scenario default_multihop --routing-mode baseline
+python3 demo.py --scenario default_multihop --routing-mode contact_aware
+python3 demo.py --scenario default_multihop --routing-mode multipath
+```
+
+### 3.3 Recommended demo sequences
+
+#### Baseline DTN behavior
+
+```bash
+python3 demo.py
+```
+
+#### Multipath advantage
+
+```bash
+python3 demo.py --scenario multipath_competition --routing-mode baseline
 python3 demo.py --scenario multipath_competition --routing-mode multipath
 ```
 
----
+#### Contact-aware routing advantage
 
-### Run tests
+```bash
+python3 demo.py --scenario contact_timing_tradeoff --routing-mode baseline
+python3 demo.py --scenario contact_timing_tradeoff --routing-mode contact_aware
+```
+
+### 4. Run all built-in comparisons
+
+```bash
+make compare
+```
+
+or:
+
+```bash
+./scripts/run_compare.sh
+```
+
+### 5. Run tests
 
 ```bash
 make test
+```
+
+or:
+
+```bash
+pytest tests/
 ```
 
 ---
@@ -374,9 +485,4 @@ AetherNet is now:
 and evolving toward:
 
 > **security-aware, intelligent space networking systems**
-
-
-
-
-
 
