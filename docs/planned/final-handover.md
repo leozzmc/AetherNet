@@ -1,10 +1,25 @@
-# Phase-6 Final Handover
+# AetherNet Phase-6 / Phase-7 Final Handover
+
+---
 
 ## 1. Completed Scope
 
-Phase-6 is complete as a deterministic decision and demo layer.
+AetherNet has completed:
 
-Implemented scope includes:
+> **Phase-6: Deterministic Security-Aware Decision System**  
+> **Phase-7: Runtime Bridge + Adaptive Policy + Showcase Layer**
+
+The system now spans three functional layers:
+
+- simulation (Phase-1~5)
+- decision intelligence (Phase-6)
+- runtime control and presentation (Phase-7)
+
+---
+
+## 2. Implemented Capabilities
+
+### Phase-6: Decision Layer
 
 - deterministic scenario generation
 - reliability and adversarial traces
@@ -13,100 +28,224 @@ Implemented scope includes:
 - security signal generation
 - security-aware routing decision artifacts
 - evaluation and benchmark execution
-- canonical demo scenarios
-- artifact bundle export
+- artifact export (structured + stable)
 - human-readable reports
 - scenario comparison reports
 
 ---
 
-## 2. Architecture Summary
+### Phase-7: Runtime + Adaptive + Showcase
 
-AetherNet currently has three relevant planes:
+- runtime filtering of unsafe links (`avoid`)
+- preferred / allowed prioritization
+- routing impact metrics collection
+- deterministic adaptive routing modes:
+  - conservative
+  - balanced
+  - aggressive
+- policy comparison automation
+- showcase report builder
+- CLI entry point:
 
-### Runtime Plane
-Handles forwarding execution and simulator behavior.
+```bash
+python scripts/run_phase6_showcase.py
+````
 
-### Decision Plane
+---
+
+## 3. Architecture Summary
+
+AetherNet is structured into three planes:
+
+### Runtime Plane (Phase-1~5)
+
+* DTN forwarding execution
+* store-carry-forward behavior
+* contact-aware routing policies
+
+---
+
+### Decision Plane (Phase-6)
+
 Produces:
-- RoutingContext
-- RoutingScoreReport
-- SecuritySignalReport
-- SecurityAwareRoutingDecision
 
-### Presentation Plane
+* `RoutingContext`
+* `RoutingScoreReport`
+* `SecuritySignalReport`
+* `SecurityAwareRoutingDecision`
+
+This layer is:
+
+* deterministic
+* replayable
+* decoupled from runtime execution
+
+---
+
+### Runtime / Presentation Plane (Phase-7)
+
+Bridges decision outputs into runtime-like behavior:
+
+* `Phase6DecisionAdapter`
+* `AdaptivePhase6Adapter`
+* `RoutingMetricsCollector`
+* `PolicyComparisonRunner`
+* `PolicyShowcaseBuilder`
+
 Produces:
-- Phase6DemoArtifactBundle
-- Phase6DemoReport
-- Phase6ComparisonReport
 
-These planes are intentionally decoupled.
-
----
-
-## 3. Deterministic Invariants
-
-Do not break these:
-
-- same seed and inputs must produce identical outputs
-- exported artifacts must be stable and mutation-safe
-- decision coverage must be exact
-- missing required data must fail explicitly
-- runtime forwarding must not be silently mutated by demo or decision helpers
+* routing candidate filtering
+* adaptive routing modes
+* policy comparison results
+* human-readable showcase reports
 
 ---
 
-## 4. Current Boundaries
+## 4. Deterministic Invariants
 
-Phase-6 does not yet do:
+These invariants must not be broken:
 
-- runtime routing-loop integration
-- path search / multi-hop synthesis
-- UI/dashboard visualization
-- online learning
+* same seed + input → identical outputs
+* all decision outputs must be reproducible
+* artifact serialization must be stable
+* decision coverage must be exact (no missing candidates)
+* exported objects must be mutation-safe
+* runtime behavior must not be implicitly altered by demo layers
 
-These are future extensions, not missing bugs.
+Adaptive layer constraints:
+
+* no randomness
+* no hidden state
+* no learning behavior
+* purely rule-based and deterministic
 
 ---
 
-## 5. Extension Guidance
+## 5. Current Boundaries
 
-### To add new scenario types
+The system currently does NOT include:
+
+* full integration of adaptive decisions into the simulator loop
+* global runtime policy switching inside simulation
+* visualization / dashboard layer
+* multi-hop secure path synthesis
+* reinforcement learning or probabilistic policy updates
+
+These are intentional design boundaries.
+
+---
+
+## 6. System Interpretation
+
+The system should be understood as:
+
+```text
+Simulation Core
+→ Decision Intelligence
+→ Runtime Control Layer
+→ Showcase / Comparison Layer
+```
+
+NOT as:
+
+```text
+fully autonomous routing system
+```
+
+---
+
+## 7. Extension Guidance
+
+### Adding new scenarios
+
 Extend:
-- `aether_demo.registry`
-- optionally benchmark pack specs
 
-### To add new threat models
+* scenario generator
+* demo registry
+* benchmark definitions
+
+---
+
+### Adding new threat models
+
 Extend:
-- adversarial traces
-- routing context observation mapping
-- probabilistic scorer
-- security signal builder
-- decision rules only if justified
 
-### To add new presentation outputs
-Build on:
-- `Phase6DemoArtifactBundle`
-- `Phase6DemoReport`
-- `Phase6ComparisonReport`
+* adversarial traces
+* routing context mapping
+* probabilistic scorer
+* security signal builder
 
-Do not embed formatting into core decision logic.
+Modify decision rules only if justified.
 
 ---
 
-## 6. Recommended Future Work
+### Adding new adaptive behavior
 
-1. runtime decision bridge
-2. visualization / figure export
-3. richer benchmark presentation
-4. optional path-level security-aware routing research
+Extend:
+
+* `AdaptiveRuntimePolicy`
+* must remain deterministic
+* must not introduce randomness or hidden state
 
 ---
 
-## 7. Handover Summary
+### Adding new presentation outputs
 
-Phase-6 should now be understood as:
+Extend:
 
-> a completed deterministic decision and demo subsystem
+* `PolicyComparisonResult`
+* `PolicyShowcaseReport`
 
-The next major milestone is runtime integration, not more core Phase-6 feature expansion.
+Do NOT:
+
+* embed formatting into core decision logic
+* mutate routing state
+
+---
+
+## 8. Recommended Next Work
+
+### Priority 1: Runtime Integration
+
+* connect Phase-6/7 decisions into simulator loop
+* enable adaptive routing during simulation
+* measure real impact (delivery, latency, drop rate)
+
+---
+
+### Priority 2: Visualization Layer
+
+* structured output for UI
+* timeline / event visualization
+* optional Streamlit dashboard
+
+---
+
+### Priority 3: Advanced Routing Research
+
+* path-level (multi-hop) decision modeling
+* route-level risk evaluation
+* policy tournament frameworks
+* expanded benchmark suites
+
+---
+
+## 9. Handover Summary
+
+AetherNet is now:
+
+> a deterministic DTN simulation and security-aware routing decision system
+> with adaptive runtime behavior and reproducible showcase outputs
+
+It is ready for:
+
+* technical demonstration
+* research extension
+* system design discussion
+* interview / portfolio usage
+
+The next milestone is:
+
+> **live runtime integration, not additional Phase-6 feature expansion**
+
+

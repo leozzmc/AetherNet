@@ -2,8 +2,8 @@
 
 **A Secure Delay-Tolerant Distributed Infrastructure Prototype for Space Networks**
 
-> Status: Phase-6 Core + Demo Layer COMPLETE  
-> Next: Phase-7 (Runtime Integration & Visualization)
+> Status: Phase-6/7 Runtime Showcase Ready  
+> Next: Live Simulation Integration & Visualization
 
 ![Aether Cover](/img/cover.png)
 
@@ -19,13 +19,14 @@ AetherNet is a **deterministic Delay-Tolerant Networking (DTN) simulation and ex
 - constrained contact windows
 - routing-policy experimentation
 - resilience and adversarial modeling
+- security-aware routing evaluation
 
 It is built for:
 
 - DTN routing research
 - reproducible experiment pipelines
-- resilience / failure modeling
-- security-aware routing evaluation
+- space network resilience modeling
+- security-aware decision experiments
 - AI-agent / engineer handoff continuity
 
 ---
@@ -34,9 +35,9 @@ It is built for:
 
 AetherNet enforces:
 
-> **Routing policy = the ONLY variable**
+> **Routing policy = the primary experimental variable**
 
-All stochastic behaviors (loss, delay, compromise) are:
+All stochastic behaviors, including loss, delay, degradation, and adversarial conditions, are:
 
 - pre-generated
 - seed-controlled
@@ -47,6 +48,7 @@ This guarantees:
 
 - exact experiment replay
 - deterministic comparison across runs
+- stable reports and artifacts
 - scientifically valid routing evaluation
 
 ---
@@ -59,7 +61,8 @@ Phase-3            = routing brain
 Phase-4            = stress / resilience shell
 Phase-5            = research pipeline & comparison system
 Phase-6            = decision intelligence / security layer
-```
+Phase-7            = runtime bridge, adaptive policy, and showcase layer
+````
 
 ---
 
@@ -67,32 +70,32 @@ Phase-6            = decision intelligence / security layer
 
 ### Phase 1–5: DTN Simulation Core & Research Pipeline
 
-#### Transport + Routing + Stress Layers
+AetherNet includes a deterministic runtime simulator with:
 
 * contact-aware routing
 * CGR-lite reasoning
 * multi-path candidate selection
-* strict priority queue
+* strict priority queueing
 * store-carry-forward persistence
 * congestion / eviction modeling
 * failure / partition modeling
 
-#### Research Pipeline (Phase-5)
+Phase-5 adds a reproducible research pipeline:
 
 * parameter sweep execution
-* aggregation & research tables
-* snapshot system (versioned artifacts)
-* snapshot comparison & lineage validation
+* aggregation and research tables
+* snapshot system
+* snapshot comparison and lineage validation
 * JSON / CSV / Markdown export
 * deterministic research reports
 
-✅ Fully integrated into runtime simulator
+✅ Fully integrated into the runtime simulator.
 
 ---
 
-## Phase-6: Security-Aware Probabilistic Decision Layer
+### Phase-6: Security-Aware Probabilistic Decision Layer
 
-Phase-6 introduces a **deterministic decision pipeline** that evaluates network state and produces:
+Phase-6 introduces a deterministic decision pipeline that evaluates candidate links and produces:
 
 * probabilistic link reliability
 * explainable scoring
@@ -100,35 +103,116 @@ Phase-6 introduces a **deterministic decision pipeline** that evaluates network 
 * routing safety classification
 * benchmark-ready decision artifacts
 
----
-
-## Phase-6 System Position
-
-AetherNet is now composed of **three planes**:
+The core classification model is:
 
 ```text
-Runtime Plane (Phase 1–5)
-    → executes DTN forwarding
-
-Decision Plane (Phase-6)
-    → evaluates + recommends routing decisions
-
-Presentation Plane (Phase-6 Demo)
-    → renders decision artifacts into reports and comparisons
+preferred → safest / highest-quality candidate
+allowed   → usable but degraded or lower-confidence candidate
+avoid     → unsafe or adversarial candidate
 ```
 
-Important:
-
-* Phase-6 is **fully deterministic**
-* Phase-6 is **decoupled from runtime execution**
-* Phase-6 currently operates as an **offline evaluation/control plane**
-* Demo layer provides **artifact export, reporting, and scenario comparison**
-
-👉 Runtime integration is planned for Phase-7
+✅ Core decision layer, artifact export, report generation, and comparison mode are complete.
 
 ---
 
-## Phase-6 Core Pipeline
+### Phase-7: Runtime Bridge, Adaptive Policy, and Showcase
+
+Phase-7 begins connecting Phase-6 decisions to runtime behavior.
+
+Implemented so far:
+
+* runtime bridge adapter
+* `avoid` link filtering
+* `preferred` / `allowed` prioritization
+* routing impact metrics
+* deterministic adaptive modes:
+
+  * conservative
+  * balanced
+  * aggressive
+* automated policy comparison
+* publishable CLI showcase report
+
+Important boundary:
+
+> The Phase-7 showcase is complete, but the main Phase-5 simulation loop does not yet globally enable adaptive Phase-6 routing by default.
+
+---
+
+## Phase-6 / Phase-7 Runtime Showcase
+
+Run the deterministic runtime policy showcase:
+
+```bash
+python scripts/run_phase6_showcase.py
+```
+
+Expected output:
+
+```text
+=== Phase-6 Runtime Policy Showcase ===
+Case: mixed-risk-demo
+
+[Candidate Outputs]
+Baseline: L1, L2
+Conservative: L1
+Balanced: L1, L2
+Aggressive: L2, L1
+
+[Policy Differences]
+Conservative removed compared to Balanced: L2
+Aggressive order differs from Balanced: yes
+
+[Interpretation]
+Conservative mode reduces routing freedom when safer preferred links exist.
+Aggressive mode preserves original safe ordering while still excluding avoid links.
+```
+
+All outputs are deterministic and reproducible across runs.
+
+### Showcase Scenario
+
+The showcase uses a fixed mixed-risk scenario:
+
+```text
+Input candidate order: L2, L3, L1
+```
+
+| Link | Condition | Decision  |
+| ---- | --------- | --------- |
+| L1   | clean     | preferred |
+| L2   | degraded  | allowed   |
+| L3   | jammed    | avoid     |
+
+### Showcase Modes
+
+| Mode         | Behavior                                                       |
+| ------------ | -------------------------------------------------------------- |
+| Baseline     | filters `avoid`, then prioritizes `preferred` before `allowed` |
+| Conservative | keeps only `preferred` links when available                    |
+| Balanced     | keeps `preferred` first, then `allowed`                        |
+| Aggressive   | removes `avoid`, but preserves original safe candidate order   |
+
+---
+
+## System Position
+
+AetherNet is organized into three planes:
+
+```text
+Runtime Plane
+    → executes DTN forwarding and store-carry-forward simulation
+
+Decision Plane
+    → evaluates candidate links and produces preferred / allowed / avoid decisions
+
+Presentation Plane
+    → renders artifacts into reports, comparisons, and showcase output
+```
+
+---
+
+## Phase-6 Core Decision Pipeline
 
 ```text
 ScenarioSpec
@@ -142,45 +226,50 @@ ScenarioSpec
 
 ---
 
-## Phase-6 Demo Pipeline
+## Phase-6 / Phase-7 Showcase Pipeline
 
 ```text
-Phase6ScenarioRegistry
-→ Phase6DemoArtifactBuilder
-→ Phase6DemoReportBuilder
-→ Phase6DemoBridge
-→ Phase6ComparisonBuilder
+RoutingContext
+→ Phase6DecisionAdapter
+→ AdaptivePhase6Adapter
+→ PolicyComparisonRunner
+→ PolicyShowcaseBuilder
+→ scripts/run_phase6_showcase.py
 ```
 
 This enables:
 
-* deterministic artifact bundles
-* human-readable reports
-* scenario-to-scenario comparison
+* deterministic runtime decision comparison
+* adaptive policy behavior comparison
+* human-readable showcase reports
+* future UI / dashboard integration
 
 ---
 
-## Deterministic Guarantees (Formal)
+## Deterministic Guarantees
 
-For any given:
+For a fixed input:
 
 ```text
 (ScenarioSpec, Seed, TimeIndex, CandidateSet)
 ```
 
-AetherNet guarantees identical outputs:
+AetherNet guarantees stable outputs for:
 
 * RoutingContext
 * RoutingScoreReport
 * SecuritySignalReport
 * SecurityAwareRoutingDecision
+* PolicyComparisonResult
+* PolicyShowcaseReport
 
 Properties:
 
-1. Seed Determinism
-2. Execution Determinism
-3. Serialization Determinism
-4. Isolation (no mutation across layers)
+1. Seed determinism
+2. Execution determinism
+3. Stable serialization
+4. No mutation leakage from exported artifacts
+5. No random runtime behavior in adaptive modes
 
 ---
 
@@ -195,41 +284,6 @@ Properties:
 | expiry_before_contact   | TTL expiration                  |
 | multipath_competition   | competing relay paths           |
 | contact_timing_tradeoff | timing-sensitive routing        |
-
----
-
-## Phase-6 Demo Usage (Python API)
-
-### Run a Phase-6 scenario
-
-```python
-from aether_demo import Phase6DemoBridge, Phase6ScenarioRegistry
-
-bridge = Phase6DemoBridge()
-
-result = bridge.run_scenario(
-    scenario_name=Phase6ScenarioRegistry.SCENARIO_CLEAN,
-    source_node_id="N1",
-    destination_node_id="N2",
-    time_index=1,
-)
-
-print(result.report.text)
-```
-
----
-
-### Compare two scenarios
-
-```python
-from aether_demo import Phase6ComparisonBuilder
-
-comp = Phase6ComparisonBuilder().build_from_runs(result_a, result_b)
-
-print(comp.text)
-```
-
-This produces deterministic, human-readable comparison output.
 
 ---
 
@@ -248,23 +302,29 @@ flowchart TB
         CONTEXT[Routing Context]
         SCORE[Probabilistic Scoring]
         SIGNAL[Security Signals]
-        DECISION[Security Routing Decision]
+        DECISION[Security-Aware Decision]
+    end
+
+    subgraph Adaptive_Runtime_Layer
+        ADAPTER[Phase6DecisionAdapter]
+        ADAPTIVE[AdaptivePhase6Adapter]
+        METRICS[Routing Metrics]
     end
 
     subgraph Presentation_Plane
-        ART[Artifacts]
-        REP[Reports]
-        COMP[Comparison]
+        COMPARE[PolicyComparisonRunner]
+        SHOWCASE[PolicyShowcaseBuilder]
+        CLI[run_phase6_showcase.py]
     end
 
     SCEN --> SIM
     SIM --> STORE
     SIM --> ROUTE
 
-    ROUTE --> CONTEXT
     CONTEXT --> SCORE --> SIGNAL --> DECISION
-
-    DECISION --> ART --> REP --> COMP
+    DECISION --> ADAPTER --> ADAPTIVE
+    ADAPTIVE --> METRICS
+    ADAPTIVE --> COMPARE --> SHOWCASE --> CLI
 ```
 
 ---
@@ -335,10 +395,17 @@ protocol/
 store/
 ```
 
-### Phase-6 Demo Layer
+### Phase-6 demo layer
 
 ```text
 aether_demo/
+```
+
+### Phase-7 runtime / adaptive showcase layer
+
+```text
+aether_phase6_runtime/
+scripts/run_phase6_showcase.py
 ```
 
 ---
@@ -353,22 +420,28 @@ source .venv/bin/activate
 make setup-dev
 ```
 
-### Smoke
+### Smoke test
 
 ```bash
 make smoke
 ```
 
-### Demo
+### Standard demo
 
 ```bash
 make demo
 ```
 
-### Run specific scenario
+### Run a specific scenario
 
 ```bash
 python3 demo.py --scenario default_multihop
+```
+
+### Run Phase-6 / Phase-7 runtime showcase
+
+```bash
+python scripts/run_phase6_showcase.py
 ```
 
 ### Run tests
@@ -381,22 +454,26 @@ make test
 
 ## Current Limitations
 
-* Phase-6 is not yet integrated into runtime forwarding loop
-* decision outputs are not yet used in live routing
-* no visualization/dashboard layer
-* no multi-hop path synthesis
+* The adaptive Phase-6 runtime layer is built and tested, but the main simulator loop does not yet globally enable it by default.
+* Current adaptive modes are deterministic and rule-based; there is no ML or reinforcement learning.
+* The decision layer evaluates candidate links, not full end-to-end secure graph paths.
+* There is no rich visualization or dashboard layer yet.
+* Multi-hop secure path synthesis remains future work.
 
 ---
 
 ## Next Roadmap
 
 ```text
-Phase-6 COMPLETE
+Current milestone:
+- Phase-6 decision system complete
+- Phase-7 runtime showcase complete
 
 Next:
-- Runtime decision integration (Phase-7)
-- Visualization / reporting enhancements
-- Advanced benchmarking
+- Live simulation-loop integration
+- Visualization / dashboard layer
+- Advanced benchmark and tournament tooling
+- Multi-hop security-aware path synthesis
 ```
 
 ---
@@ -405,10 +482,9 @@ Next:
 
 AetherNet is now:
 
-> a deterministic DTN research infrastructure with a full experiment → evaluation → comparison pipeline
+> a deterministic DTN research infrastructure with a security-aware decision layer, adaptive runtime showcase, and reproducible policy comparison artifacts.
 
-and evolving toward:
+It is evolving toward:
 
-> **security-aware, intelligent space networking systems**
-
+> deterministic, explainable, security-aware space networking systems.
 
