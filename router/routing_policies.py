@@ -351,15 +351,14 @@ class RoutingPolicy:
 
     def get_candidate_links(self, context, original_candidates):
         candidates = original_candidates
-
+        
         if ENABLE_PHASE6_RUNTIME:
             try:
-                candidates = self._phase6_adapter.filter_candidates(
+                candidates = self._phase6_adapter.apply_decision(
                     context,
                     candidates,
                 )
             except Exception:
-                # 🔥 CRITICAL: never break routing pipeline
                 candidates = original_candidates
 
         return candidates
