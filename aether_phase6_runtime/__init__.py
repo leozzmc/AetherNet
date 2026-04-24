@@ -7,6 +7,7 @@ from .comparison import (
     PolicyComparisonResult,
     PolicyComparisonRunner,
 )
+from .showcase import PolicyShowcaseReport, PolicyShowcaseBuilder
 
 __all__ = [
     "ENABLE_PHASE6_RUNTIME",
@@ -20,4 +21,6 @@ __all__ = [
     "PolicyComparisonCase",
     "PolicyComparisonResult",
     "PolicyComparisonRunner",
+    "PolicyShowcaseReport",
+    "PolicyShowcaseBuilder",
 ]
