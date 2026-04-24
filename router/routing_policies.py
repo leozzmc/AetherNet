@@ -2,6 +2,10 @@ from __future__ import annotations
 
 from typing import Dict, List, Optional
 
+from aether_phase6_runtime.adapter import Phase6DecisionAdapter
+from aether_phase6_runtime.adaptive import AdaptivePhase6Adapter
+from aether_phase6_runtime.metrics import RoutingMetricsSummary
+from aether_routing_context import NetworkObservation, RoutingContext
 from router.bundle import Bundle
 from router.contact_graph import ContactForecast
 from router.contact_manager import ContactManager
@@ -35,7 +39,7 @@ class LegacyRoutingPolicy:
 
 
 class StaticRoutingPolicy:
-    """Wave-38: Baseline routing policy backed by the existing deterministic RoutingTable."""
+    """Baseline routing policy backed by deterministic RoutingTable."""
 
     def __init__(self, routing_table: RoutingTable):
         self.routing_table = routing_table
@@ -71,7 +75,7 @@ class StaticRoutingPolicy:
 
 
 class ContactAwareRoutingPolicy:
-    """Wave-39: Contact-aware routing policy. Requires the contact to be open NOW."""
+    """Contact-aware routing policy. Requires the contact to be open now."""
 
     def __init__(self, routing_table: RoutingTable, contact_manager: ContactManager):
         self.routing_table = routing_table
@@ -121,15 +125,159 @@ class ContactAwareRoutingPolicy:
 
 
 class ScoredContactAwareRoutingPolicy:
-    """Wave-40: Multi-candidate routing policy with deterministic scoring."""
+    """
+    Multi-candidate routing policy with deterministic scoring.
+
+    Wave-97 adds an optional Phase-6/7 runtime hook.
+
+    Supported routing modes:
+    - legacy: original behavior
+    - phase6_balanced: filter/prioritize candidates using Phase6DecisionAdapter
+    - phase6_adaptive: apply AdaptivePhase6Adapter with deterministic neutral summary
+
+    Default remains legacy.
+    """
+
+    ROUTING_MODE_LEGACY = "legacy"
+    ROUTING_MODE_PHASE6_BALANCED = "phase6_balanced"
+    ROUTING_MODE_PHASE6_ADAPTIVE = "phase6_adaptive"
+
+    _SUPPORTED_ROUTING_MODES = {
+        ROUTING_MODE_LEGACY,
+        ROUTING_MODE_PHASE6_BALANCED,
+        ROUTING_MODE_PHASE6_ADAPTIVE,
+    }
 
     def __init__(
         self,
         candidate_routes: Dict[str, Dict[str, List[RouteCandidate]]],
         contact_manager: ContactManager,
+        routing_mode: str = ROUTING_MODE_LEGACY,
     ):
+        if routing_mode not in self._SUPPORTED_ROUTING_MODES:
+            raise ValueError(f"Unsupported routing_mode: {routing_mode}")
+
         self.candidate_routes = candidate_routes
         self.contact_manager = contact_manager
+        self.routing_mode = routing_mode
+
+        self._phase6_adapter: Optional[Phase6DecisionAdapter] = None
+        self._adaptive_adapter: Optional[AdaptivePhase6Adapter] = None
+
+        if self.routing_mode != self.ROUTING_MODE_LEGACY:
+            self._phase6_adapter = Phase6DecisionAdapter()
+            self._adaptive_adapter = AdaptivePhase6Adapter(
+                base_adapter=self._phase6_adapter,
+            )
+
+    def _build_minimal_context(
+        self,
+        current_node: str,
+        destination: str,
+        current_time: int,
+        candidate_link_ids: List[str],
+    ) -> RoutingContext:
+        """
+        Build a minimal valid Phase-6 RoutingContext from local routing state.
+
+        Note:
+        - candidate next-hop IDs are used as candidate link IDs for the runtime hook.
+        - threat lists are empty by default; tests and future simulator integration may
+          override this method or pass richer observations.
+        """
+
+        node_ids = sorted(set([current_node, destination] + candidate_link_ids))
+
+        observation = NetworkObservation(
+            time_index=current_time,
+            node_ids=node_ids,
+            link_ids=list(candidate_link_ids),
+            degraded_links=[],
+            extra_delay_ms_by_link={},
+            jammed_links=[],
+            malicious_drop_links=[],
+            compromised_nodes=[],
+            injected_delay_ms_by_link={},
+        )
+
+        return RoutingContext(
+            scenario_name="live_simulation",
+            master_seed=42,
+            time_index=current_time,
+            source_node_id=current_node,
+            destination_node_id=destination,
+            candidate_link_ids=list(candidate_link_ids),
+            network_observation=observation,
+            metadata={
+                "routing_mode": self.routing_mode,
+                "integration": "wave_97",
+            },
+        )
+
+    @staticmethod
+    def _neutral_adaptive_summary() -> RoutingMetricsSummary:
+        return RoutingMetricsSummary(
+            total_decisions=1,
+            preferred_ratio=0.5,
+            allowed_ratio=0.5,
+            average_filtered=1.0,
+        )
+
+    def _apply_phase6_runtime_hook(
+        self,
+        current_node: str,
+        destination: str,
+        current_time: int,
+        valid_candidates: List[RouteCandidate],
+    ) -> List[RouteCandidate]:
+        if self.routing_mode == self.ROUTING_MODE_LEGACY:
+            return valid_candidates
+
+        if not valid_candidates:
+            return []
+
+        candidate_link_ids = [candidate.next_hop for candidate in valid_candidates]
+
+        context = self._build_minimal_context(
+            current_node=current_node,
+            destination=destination,
+            current_time=current_time,
+            candidate_link_ids=candidate_link_ids,
+        )
+
+        try:
+            if self.routing_mode == self.ROUTING_MODE_PHASE6_BALANCED:
+                assert self._phase6_adapter is not None
+                selected_ids = self._phase6_adapter.apply_decision(
+                    context,
+                    candidate_link_ids,
+                )
+
+            elif self.routing_mode == self.ROUTING_MODE_PHASE6_ADAPTIVE:
+                assert self._adaptive_adapter is not None
+                selected_ids = self._adaptive_adapter.apply_adaptive_decision(
+                    context,
+                    candidate_link_ids,
+                    self._neutral_adaptive_summary(),
+                )
+
+            else:
+                selected_ids = candidate_link_ids
+
+        except Exception:
+            # Safety boundary: never break the legacy routing pipeline.
+            return valid_candidates
+
+        candidate_by_next_hop = {
+            candidate.next_hop: candidate
+            for candidate in valid_candidates
+        }
+
+        return [
+            candidate_by_next_hop[next_hop]
+            for next_hop in selected_ids
+            if next_hop in candidate_by_next_hop
+        ]
 
     def evaluate_decision(
         self,
@@ -169,7 +317,17 @@ class ScoredContactAwareRoutingPolicy:
         if not valid_candidates:
             return RoutingDecision(next_hop=None, reason="contact_blocked")
 
-        best_hop = RouteScorer.choose_best(valid_candidates)
+        filtered_candidates = self._apply_phase6_runtime_hook(
+            current_node=current_node,
+            destination=bundle.destination,
+            current_time=current_time,
+            valid_candidates=valid_candidates,
+        )
+
+        if not filtered_candidates:
+            return RoutingDecision(next_hop=None, reason="phase6_filtered_all")
+
+        best_hop = RouteScorer.choose_best(filtered_candidates)
         return RoutingDecision(next_hop=best_hop, reason="selected_scored_candidate")
 
     def select_next_hop(
@@ -182,7 +340,7 @@ class ScoredContactAwareRoutingPolicy:
 
 
 class CGRLiteRoutingPolicy:
-    """Wave-41: Bounded 2-hop future-contact-aware routing policy."""
+    """Bounded 2-hop future-contact-aware routing policy."""
 
     def __init__(
         self,
@@ -282,7 +440,7 @@ class CGRLiteRoutingPolicy:
 
 
 class OpportunisticRoutingPolicy:
-    """Wave-46: Bounded Opportunistic Hold-vs-Forward Baseline."""
+    """Bounded Opportunistic Hold-vs-Forward Baseline."""
 
     def __init__(
         self,
@@ -381,9 +539,7 @@ class OpportunisticRoutingPolicy:
 
 
 class MultiPathRoutingPolicy:
-    """
-    Wave-48: Bounded Multi-Path Candidate Selection Baseline.
-    """
+    """Bounded Multi-Path Candidate Selection Baseline."""
 
     def __init__(
         self,
