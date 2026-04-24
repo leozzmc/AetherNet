@@ -2,6 +2,11 @@ from .config import ENABLE_PHASE6_RUNTIME
 from .adapter import Phase6DecisionAdapter
 from .metrics import RoutingMetrics, RoutingMetricsSummary, RoutingMetricsCollector
 from .adaptive import AdaptiveRuntimeMode, AdaptiveRuntimePolicy, AdaptivePhase6Adapter
+from .comparison import (
+    PolicyComparisonCase,
+    PolicyComparisonResult,
+    PolicyComparisonRunner,
+)
 
 __all__ = [
     "ENABLE_PHASE6_RUNTIME",
@@ -12,4 +17,7 @@ __all__ = [
     "AdaptiveRuntimeMode",
     "AdaptiveRuntimePolicy",
     "AdaptivePhase6Adapter",
+    "PolicyComparisonCase",
+    "PolicyComparisonResult",
+    "PolicyComparisonRunner",
 ]
