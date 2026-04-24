@@ -338,3 +338,28 @@ class MultiPathRoutingPolicy:
         Maintains Phase-3 API compatibility by degrading cleanly to the top-1 choice.
         """
         return self.evaluate_decision(current_node, bundle, current_time).next_hop
+
+# --- Wave-89 Integration ---
+from aether_phase6_runtime.config import ENABLE_PHASE6_RUNTIME
+from aether_phase6_runtime.adapter import Phase6DecisionAdapter
+
+
+class RoutingPolicy:
+
+    def __init__(self) -> None:
+        self._phase6_adapter = Phase6DecisionAdapter()
+
+    def get_candidate_links(self, context, original_candidates):
+        candidates = original_candidates
+
+        if ENABLE_PHASE6_RUNTIME:
+            try:
+                candidates = self._phase6_adapter.filter_candidates(
+                    context,
+                    candidates,
+                )
+            except Exception:
+                # 🔥 CRITICAL: never break routing pipeline
+                candidates = original_candidates
+
+        return candidates
