@@ -1,174 +1,66 @@
-# AetherNet Phase-integration Roadmap
+# AetherNet Phase-6 Roadmap
 
-## Phase-6: Deterministic Security-Aware Decision Layer
-
-Phase-6 introduces a new architectural plane:
-
-> Decision Plane (evaluation, scoring, security reasoning)
+## Phase-6: Deterministic Security-Aware Decision and Demo Layer
 
 ---
 
-## Completed Waves (Wave-73 ~ 82)
+## Completed Waves
 
-### Foundation Layer
+### Core foundation
+- [x] Wave-73: Controlled Randomness Foundation
+- [x] Wave-74: Reliability Trace System
+- [x] Wave-75: Adversarial Trace Framework
+- [x] Wave-76: Scenario Generator
 
-- [x] Wave-73: Controlled Randomness Foundation  
-  deterministic randomness via seed + hashing
+### Context and scoring
+- [x] Wave-77: Routing Context Abstraction
+- [x] Wave-78: Probabilistic Routing Scoring
 
-- [x] Wave-74: Reliability Trace System  
-  degradation modeling (loss / delay)
+### Evaluation and security
+- [x] Wave-79: Policy Evaluation Engine
+- [x] Wave-80: Security Signal Layer
+- [x] Wave-81: Security-Aware Routing Decision
+- [x] Wave-82: Benchmark Pack
 
-- [x] Wave-75: Adversarial Trace Framework  
-  jamming / disruption / malicious behavior
-
-- [x] Wave-76: Scenario Generator  
-  deterministic scenario construction
-
----
-
-### Context & Scoring Layer
-
-- [x] Wave-77: RoutingContextBuilder  
-  snapshot extraction of network state
-
-- [x] Wave-78: ProbabilisticScorer  
-  explainable probabilistic scoring
-
----
-
-### Decision & Security Layer
-
-- [x] Wave-79: PolicyEvaluationEngine  
-  structured evaluation framework
-
-- [x] Wave-80: SecuritySignalBuilder  
-  severity classification + threat signals
-
-- [x] Wave-81: SecurityAwareRoutingEngine  
-  decision classification (preferred / allowed / avoid)
+### Documentation and demo integration
+- [x] Wave-83: Documentation / Integration Closure
+- [x] Wave-84: Phase-6 Demo Scenario Registry
+- [x] Wave-85: Artifact Export Layer
+- [x] Wave-86: Human-Readable Demo Report Builder
+- [x] Wave-87: Minimal Demo Bridge and Comparison Mode
 
 ---
 
-### Evaluation Layer
+## Phase-6 Status
 
-- [x] Wave-82: Benchmark Pack Orchestration  
-  multi-scenario execution + aggregation
+Phase-6 core and demo-layer integration are complete.
 
----
+What is complete:
+- deterministic decision pipeline
+- benchmark packaging
+- canonical demo scenarios
+- artifact export
+- human-readable reporting
+- scenario comparison
 
-## Phase-6 Closure
-
-- [x] Wave-83: Documentation & System Integration  
-  README + whitepaper + system sequence + handover
-
----
-
-# 🚀 Next Stage: Demo Integration (Wave-84 ~ 87)
-
-## Objective
-
-Bridge:
-
-```text
-Decision Plane → Runtime Demo
-````
-
-Make Phase-6 observable and demonstrable.
+What is not yet complete:
+- runtime forwarding-loop integration
+- visualization/dashboard layer
+- multi-hop path synthesis
 
 ---
 
-## Wave-84: Phase-6 Scenario Integration
+## Future Directions
 
-Introduce new demo scenarios:
+### Runtime integration
+- decision-to-forwarding bridge
+- online security-aware routing prototype
 
-* clean_baseline_phase6
-* degraded_network_phase6
-* jammed_link_phase6
-* mixed_risk_phase6
+### Visualization
+- figure export
+- dashboard / timeline views
 
-Goals:
-
-* expose reliability + adversarial effects
-* deterministic replay
-
----
-
-## Wave-85: Artifact Export Layer
-
-Extend demo to output:
-
-* RoutingContext snapshot
-* Score report
-* Security signal report
-* Routing decision
-
-Goal:
-
-* make Phase-6 visible in demo output
-
----
-
-## Wave-86: Human-Readable Demo Output
-
-Transform raw artifacts into:
-
-* structured readable reports
-* scenario summaries
-* decision explanations
-
-Goal:
-
-* enable human interpretation
-
----
-
-## Wave-87: Decision Comparison Mode
-
-Enable comparison between:
-
-* baseline routing
-* probabilistic scoring
-* security-aware decision
-
-Goal:
-
-* demonstrate Phase-6 value clearly
-
----
-
-# Future Directions (Post Phase-6)
-
-## Runtime Integration
-
-* decision → forwarding loop bridge
-* adaptive routing injection
-
-## Advanced Modeling
-
-* multi-hop path synthesis
-* graph-based optimization
-
-## Observability
-
-* visualization layer
-* dashboard / timeline
-
-## AI / Learning
-
-* offline policy learning
-* model-based routing optimization
-
----
-
-# Summary
-
-Phase-6 is now:
-
-> a complete deterministic decision and evaluation system
-
-Next step:
-
-> transform it into a visible, interactive demo system
-
-```
-
+### Advanced benchmarking
+- larger suites
+- richer comparison outputs
+- optional policy tournament tooling
