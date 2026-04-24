@@ -2,8 +2,8 @@
 
 **A Secure Delay-Tolerant Distributed Infrastructure Prototype for Space Networks**
 
-> Status: Phase-6 Core COMPLETE  
-> Next: Phase-6 Demo Integration (Wave-84~87)
+> Status: Phase-6 Core + Demo Layer COMPLETE  
+> Next: Phase-7 (Runtime Integration & Visualization)
 
 ![Aether Cover](/img/cover.png)
 
@@ -59,7 +59,7 @@ Phase-3            = routing brain
 Phase-4            = stress / resilience shell
 Phase-5            = research pipeline & comparison system
 Phase-6            = decision intelligence / security layer
-````
+```
 
 ---
 
@@ -104,7 +104,7 @@ Phase-6 introduces a **deterministic decision pipeline** that evaluates network 
 
 ## Phase-6 System Position
 
-AetherNet is now composed of **two planes**:
+AetherNet is now composed of **three planes**:
 
 ```text
 Runtime Plane (Phase 1–5)
@@ -112,6 +112,9 @@ Runtime Plane (Phase 1–5)
 
 Decision Plane (Phase-6)
     → evaluates + recommends routing decisions
+
+Presentation Plane (Phase-6 Demo)
+    → renders decision artifacts into reports and comparisons
 ```
 
 Important:
@@ -119,12 +122,13 @@ Important:
 * Phase-6 is **fully deterministic**
 * Phase-6 is **decoupled from runtime execution**
 * Phase-6 currently operates as an **offline evaluation/control plane**
+* Demo layer provides **artifact export, reporting, and scenario comparison**
 
-👉 Integration into runtime is planned in upcoming waves.
+👉 Runtime integration is planned for Phase-7
 
 ---
 
-## Phase-6 Pipeline
+## Phase-6 Core Pipeline
 
 ```text
 ScenarioSpec
@@ -135,6 +139,24 @@ ScenarioSpec
 → SecurityAwareRoutingEngine
 → Evaluation / Benchmark
 ```
+
+---
+
+## Phase-6 Demo Pipeline
+
+```text
+Phase6ScenarioRegistry
+→ Phase6DemoArtifactBuilder
+→ Phase6DemoReportBuilder
+→ Phase6DemoBridge
+→ Phase6ComparisonBuilder
+```
+
+This enables:
+
+* deterministic artifact bundles
+* human-readable reports
+* scenario-to-scenario comparison
 
 ---
 
@@ -151,7 +173,7 @@ AetherNet guarantees identical outputs:
 * RoutingContext
 * RoutingScoreReport
 * SecuritySignalReport
-* RoutingDecision
+* SecurityAwareRoutingDecision
 
 Properties:
 
@@ -164,41 +186,50 @@ Properties:
 
 ## Built-in Reference Scenarios
 
-AetherNet includes deterministic baseline scenarios for validation and demo.
+### Core DTN Scenarios
 
-### `default_multihop`
+| Scenario                | Description                     |
+| ----------------------- | ------------------------------- |
+| default_multihop        | baseline forwarding correctness |
+| delayed_delivery        | hold-then-forward behavior      |
+| expiry_before_contact   | TTL expiration                  |
+| multipath_competition   | competing relay paths           |
+| contact_timing_tradeoff | timing-sensitive routing        |
 
-* baseline DTN forwarding
-* multi-hop delivery validation
+---
 
-### `delayed_delivery`
+## Phase-6 Demo Usage (Python API)
 
-* validates hold-then-forward behavior
-* ensures deterministic delayed routing
+### Run a Phase-6 scenario
 
-### `expiry_before_contact`
+```python
+from aether_demo import Phase6DemoBridge, Phase6ScenarioRegistry
 
-* validates TTL expiration
-* ensures strict lifecycle enforcement
+bridge = Phase6DemoBridge()
 
-### `multipath_competition`
+result = bridge.run_scenario(
+    scenario_name=Phase6ScenarioRegistry.SCENARIO_CLEAN,
+    source_node_id="N1",
+    destination_node_id="N2",
+    time_index=1,
+)
 
-* competing relay paths
-* only one valid downstream path
+print(result.report.text)
+```
 
-Expected:
+---
 
-* baseline → may fail
-* multipath → succeeds
+### Compare two scenarios
 
-### `contact_timing_tradeoff`
+```python
+from aether_demo import Phase6ComparisonBuilder
 
-* timing-sensitive routing decision
+comp = Phase6ComparisonBuilder().build_from_runs(result_a, result_b)
 
-Expected:
+print(comp.text)
+```
 
-* baseline → fails
-* contact-aware → succeeds
+This produces deterministic, human-readable comparison output.
 
 ---
 
@@ -213,33 +244,28 @@ flowchart TB
         ROUTE[Routing Policies]
     end
 
-    subgraph Decision_Plane_Phase6
+    subgraph Decision_Plane
         CONTEXT[Routing Context]
         SCORE[Probabilistic Scoring]
         SIGNAL[Security Signals]
         DECISION[Security Routing Decision]
     end
 
-    subgraph Output
-        MET[Metrics]
+    subgraph Presentation_Plane
         ART[Artifacts]
+        REP[Reports]
+        COMP[Comparison]
     end
 
     SCEN --> SIM
     SIM --> STORE
     SIM --> ROUTE
 
-    ROUTE --> MET
-    STORE --> MET
+    ROUTE --> CONTEXT
+    CONTEXT --> SCORE --> SIGNAL --> DECISION
 
-    CONTEXT --> SCORE --> SIGNAL --> DECISION --> ART
+    DECISION --> ART --> REP --> COMP
 ```
-
-For additional architecture documentation, see:
-
-* `docs/architecture.md`
-* `docs/system-sequence.md`
-* `docs/system-sequence-phase-6.md`
 
 ---
 
@@ -289,73 +315,37 @@ flowchart LR
 ### Routing / decision logic
 
 ```text
-router/routing_policies.py
-router/contact_graph.py
-router/route_scoring.py
-router/routing_decision.py
-metrics/routing_metrics.py
+router/
+metrics/
 ```
 
-### Storage / stress / resilience
+### Storage / resilience
 
 ```text
 router/store_capacity.py
 router/eviction_policy.py
-router/qos.py
 router/failure_model.py
-metrics/congestion_metrics.py
 ```
 
-### Transport / simulation
+### Simulation
 
 ```text
-protocol/
 sim/
+protocol/
 store/
-bundle_queue/
 ```
 
-### Documentation / handoff
+### Phase-6 Demo Layer
 
 ```text
-README.md
-docs/roadmap.md
-docs/roadmap-phase-5.md
-docs/roadmap-phase-6.md
-docs/system-sequence.md
-docs/system-sequence-phase-5.md
-docs/system-sequence-phase-6.md
-docs/architecture.md
-docs/phase-2-whitepaper.md
-docs/phase-2-2-whitepaper.md
-docs/phase-3-4-whitepaper.md
-docs/phase-5-whitepaper.md
-docs/phase-6-whitepaper.md
-```
-
-### Phase-5 Research Source Areas
-
-```text
-sim/experiment_harness.py
-sim/parameter_sweep.py
-sim/sweep_aggregation.py
-sim/research_table_export.py
-sim/research_export_manifest.py
-sim/research_snapshot.py
-sim/research_snapshot_query.py
-sim/research_snapshot_compare.py
-sim/research_comparison_export.py
-sim/research_snapshot_registry.py
-sim/research_report.py
+aether_demo/
 ```
 
 ---
 
 ## How to Run
 
-### 1. Environment setup
-
-AetherNet requires Python 3.10+.
+### Setup
 
 ```bash
 python3 -m venv .venv
@@ -363,115 +353,50 @@ source .venv/bin/activate
 make setup-dev
 ```
 
-### 2. Smoke validation
+### Smoke
 
 ```bash
 make smoke
 ```
 
-### 3. Run demo
+### Demo
 
 ```bash
 make demo
 ```
 
-or:
-
-```bash
-./scripts/run_demo.sh
-```
-
-### 3.1 Run specific scenario
+### Run specific scenario
 
 ```bash
 python3 demo.py --scenario default_multihop
 ```
 
-### 3.2 Override routing mode
-
-```bash
-python3 demo.py --scenario default_multihop --routing-mode baseline
-python3 demo.py --scenario default_multihop --routing-mode contact_aware
-python3 demo.py --scenario default_multihop --routing-mode multipath
-```
-
-### 3.3 Recommended demo sequences
-
-#### Baseline DTN behavior
-
-```bash
-python3 demo.py
-```
-
-#### Multipath advantage
-
-```bash
-python3 demo.py --scenario multipath_competition --routing-mode baseline
-python3 demo.py --scenario multipath_competition --routing-mode multipath
-```
-
-#### Contact-aware routing advantage
-
-```bash
-python3 demo.py --scenario contact_timing_tradeoff --routing-mode baseline
-python3 demo.py --scenario contact_timing_tradeoff --routing-mode contact_aware
-```
-
-### 4. Run all built-in comparisons
-
-```bash
-make compare
-```
-
-or:
-
-```bash
-./scripts/run_compare.sh
-```
-
-### 5. Run tests
+### Run tests
 
 ```bash
 make test
 ```
 
-or:
-
-```bash
-pytest tests/
-```
-
----
-
-## How to Interpret Demo Results
-
-> Only routing policy changes — everything else is deterministic.
-
-| Scenario                | Meaning                  |
-| ----------------------- | ------------------------ |
-| default_multihop        | baseline correctness     |
-| multipath_competition   | path ambiguity           |
-| contact_timing_tradeoff | future-contact reasoning |
-
 ---
 
 ## Current Limitations
 
-* Phase-6 is not yet integrated into runtime routing loop
-* no visualization layer for security signals
-* no multi-hop path synthesis in decision layer
+* Phase-6 is not yet integrated into runtime forwarding loop
+* decision outputs are not yet used in live routing
+* no visualization/dashboard layer
+* no multi-hop path synthesis
 
 ---
 
 ## Next Roadmap
 
 ```text
-Phase-6 Demo Integration:
+Phase-6 COMPLETE
 
-Wave-84: scenario integration
-Wave-85: artifact export
-Wave-86: human-readable output
-Wave-87: runtime bridging
+Next:
+- Runtime decision integration (Phase-7)
+- Visualization / reporting enhancements
+- Advanced benchmarking
 ```
 
 ---
@@ -485,4 +410,5 @@ AetherNet is now:
 and evolving toward:
 
 > **security-aware, intelligent space networking systems**
+
 
