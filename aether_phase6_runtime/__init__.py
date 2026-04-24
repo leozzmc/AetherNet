@@ -8,6 +8,11 @@ from .comparison import (
     PolicyComparisonRunner,
 )
 from .showcase import PolicyShowcaseReport, PolicyShowcaseBuilder
+from .simulation_metrics import (
+    SimulationRoutingMetric,
+    SimulationRoutingMetricsSummary,
+    SimulationRoutingMetricsCollector,
+)
 
 __all__ = [
     "ENABLE_PHASE6_RUNTIME",
@@ -23,4 +28,7 @@ __all__ = [
     "PolicyComparisonRunner",
     "PolicyShowcaseReport",
     "PolicyShowcaseBuilder",
+    "SimulationRoutingMetric",
+    "SimulationRoutingMetricsSummary",
+    "SimulationRoutingMetricsCollector",
 ]
