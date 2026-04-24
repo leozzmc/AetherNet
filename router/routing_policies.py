@@ -8,20 +8,29 @@ from router.contact_manager import ContactManager
 from router.policies import next_hop_for
 from router.route_scoring import RouteCandidate, RouteScorer
 from router.routing_decision import RoutingDecision
-from router.routing_policy import RoutingPolicy
 from routing.routing_table import RoutingTable
 
 
 class LegacyRoutingPolicy:
     """Preserve the original hardcoded route fallback behavior."""
 
-    def evaluate_decision(self, current_node: str, bundle: Bundle, current_time: int) -> RoutingDecision:
+    def evaluate_decision(
+        self,
+        current_node: str,
+        bundle: Bundle,
+        current_time: int,
+    ) -> RoutingDecision:
         hop = next_hop_for(current_node, bundle.destination)
         if hop:
             return RoutingDecision(next_hop=hop, reason="selected_legacy_route")
         return RoutingDecision(next_hop=None, reason="no_route")
 
-    def select_next_hop(self, current_node: str, bundle: Bundle, current_time: int) -> Optional[str]:
+    def select_next_hop(
+        self,
+        current_node: str,
+        bundle: Bundle,
+        current_time: int,
+    ) -> Optional[str]:
         return self.evaluate_decision(current_node, bundle, current_time).next_hop
 
 
@@ -31,20 +40,33 @@ class StaticRoutingPolicy:
     def __init__(self, routing_table: RoutingTable):
         self.routing_table = routing_table
 
-    def evaluate_decision(self, current_node: str, bundle: Bundle, current_time: int) -> RoutingDecision:
+    def evaluate_decision(
+        self,
+        current_node: str,
+        bundle: Bundle,
+        current_time: int,
+    ) -> RoutingDecision:
         if current_node == bundle.destination:
             return RoutingDecision(next_hop=None, reason="at_destination")
 
         if bundle.next_hop:
             return RoutingDecision(next_hop=bundle.next_hop, reason="explicit_override_open")
 
-        candidate_hop = self.routing_table.get_next_hop(current_node, bundle.destination)
+        candidate_hop = self.routing_table.get_next_hop(
+            current_node,
+            bundle.destination,
+        )
         if candidate_hop:
             return RoutingDecision(next_hop=candidate_hop, reason="selected_static_route")
-            
+
         return RoutingDecision(next_hop=None, reason="no_route")
 
-    def select_next_hop(self, current_node: str, bundle: Bundle, current_time: int) -> Optional[str]:
+    def select_next_hop(
+        self,
+        current_node: str,
+        bundle: Bundle,
+        current_time: int,
+    ) -> Optional[str]:
         return self.evaluate_decision(current_node, bundle, current_time).next_hop
 
 
@@ -55,51 +77,93 @@ class ContactAwareRoutingPolicy:
         self.routing_table = routing_table
         self.contact_manager = contact_manager
 
-    def evaluate_decision(self, current_node: str, bundle: Bundle, current_time: int) -> RoutingDecision:
+    def evaluate_decision(
+        self,
+        current_node: str,
+        bundle: Bundle,
+        current_time: int,
+    ) -> RoutingDecision:
         if current_node == bundle.destination:
             return RoutingDecision(next_hop=None, reason="at_destination")
 
         if bundle.next_hop:
-            if self.contact_manager.is_forwarding_allowed(current_node, bundle.next_hop, current_time):
+            if self.contact_manager.is_forwarding_allowed(
+                current_node,
+                bundle.next_hop,
+                current_time,
+            ):
                 return RoutingDecision(next_hop=bundle.next_hop, reason="explicit_override_open")
             return RoutingDecision(next_hop=None, reason="explicit_override_blocked")
 
-        candidate_hop = self.routing_table.get_next_hop(current_node, bundle.destination)
+        candidate_hop = self.routing_table.get_next_hop(
+            current_node,
+            bundle.destination,
+        )
         if not candidate_hop:
             return RoutingDecision(next_hop=None, reason="no_route")
 
-        if self.contact_manager.is_forwarding_allowed(current_node, candidate_hop, current_time):
+        if self.contact_manager.is_forwarding_allowed(
+            current_node,
+            candidate_hop,
+            current_time,
+        ):
             return RoutingDecision(next_hop=candidate_hop, reason="selected_static_route")
 
         return RoutingDecision(next_hop=None, reason="contact_blocked")
 
-    def select_next_hop(self, current_node: str, bundle: Bundle, current_time: int) -> Optional[str]:
+    def select_next_hop(
+        self,
+        current_node: str,
+        bundle: Bundle,
+        current_time: int,
+    ) -> Optional[str]:
         return self.evaluate_decision(current_node, bundle, current_time).next_hop
 
 
 class ScoredContactAwareRoutingPolicy:
     """Wave-40: Multi-candidate routing policy with deterministic scoring."""
 
-    def __init__(self, candidate_routes: Dict[str, Dict[str, List[RouteCandidate]]], contact_manager: ContactManager):
+    def __init__(
+        self,
+        candidate_routes: Dict[str, Dict[str, List[RouteCandidate]]],
+        contact_manager: ContactManager,
+    ):
         self.candidate_routes = candidate_routes
         self.contact_manager = contact_manager
 
-    def evaluate_decision(self, current_node: str, bundle: Bundle, current_time: int) -> RoutingDecision:
+    def evaluate_decision(
+        self,
+        current_node: str,
+        bundle: Bundle,
+        current_time: int,
+    ) -> RoutingDecision:
         if current_node == bundle.destination:
             return RoutingDecision(next_hop=None, reason="at_destination")
 
         if bundle.next_hop:
-            if self.contact_manager.is_forwarding_allowed(current_node, bundle.next_hop, current_time):
+            if self.contact_manager.is_forwarding_allowed(
+                current_node,
+                bundle.next_hop,
+                current_time,
+            ):
                 return RoutingDecision(next_hop=bundle.next_hop, reason="explicit_override_open")
             return RoutingDecision(next_hop=None, reason="explicit_override_blocked")
 
-        candidates = self.candidate_routes.get(current_node, {}).get(bundle.destination, [])
+        candidates = self.candidate_routes.get(current_node, {}).get(
+            bundle.destination,
+            [],
+        )
         if not candidates:
             return RoutingDecision(next_hop=None, reason="no_route")
 
         valid_candidates = [
-            c for c in candidates
-            if self.contact_manager.is_forwarding_allowed(current_node, c.next_hop, current_time)
+            candidate
+            for candidate in candidates
+            if self.contact_manager.is_forwarding_allowed(
+                current_node,
+                candidate.next_hop,
+                current_time,
+            )
         ]
 
         if not valid_candidates:
@@ -108,28 +172,49 @@ class ScoredContactAwareRoutingPolicy:
         best_hop = RouteScorer.choose_best(valid_candidates)
         return RoutingDecision(next_hop=best_hop, reason="selected_scored_candidate")
 
-    def select_next_hop(self, current_node: str, bundle: Bundle, current_time: int) -> Optional[str]:
+    def select_next_hop(
+        self,
+        current_node: str,
+        bundle: Bundle,
+        current_time: int,
+    ) -> Optional[str]:
         return self.evaluate_decision(current_node, bundle, current_time).next_hop
 
 
 class CGRLiteRoutingPolicy:
     """Wave-41: Bounded 2-hop future-contact-aware routing policy."""
 
-    def __init__(self, candidate_routes: Dict[str, Dict[str, List[RouteCandidate]]], contact_manager: ContactManager):
+    def __init__(
+        self,
+        candidate_routes: Dict[str, Dict[str, List[RouteCandidate]]],
+        contact_manager: ContactManager,
+    ):
         self.candidate_routes = candidate_routes
         self.contact_manager = contact_manager
         self.forecast = ContactForecast(contact_manager)
 
-    def evaluate_decision(self, current_node: str, bundle: Bundle, current_time: int) -> RoutingDecision:
+    def evaluate_decision(
+        self,
+        current_node: str,
+        bundle: Bundle,
+        current_time: int,
+    ) -> RoutingDecision:
         if current_node == bundle.destination:
             return RoutingDecision(next_hop=None, reason="at_destination")
 
         if bundle.next_hop:
-            if self.contact_manager.is_forwarding_allowed(current_node, bundle.next_hop, current_time):
+            if self.contact_manager.is_forwarding_allowed(
+                current_node,
+                bundle.next_hop,
+                current_time,
+            ):
                 return RoutingDecision(next_hop=bundle.next_hop, reason="explicit_override_open")
             return RoutingDecision(next_hop=None, reason="explicit_override_blocked")
 
-        candidates = self.candidate_routes.get(current_node, {}).get(bundle.destination, [])
+        candidates = self.candidate_routes.get(current_node, {}).get(
+            bundle.destination,
+            [],
+        )
         if not candidates:
             return RoutingDecision(next_hop=None, reason="no_route")
 
@@ -140,7 +225,11 @@ class CGRLiteRoutingPolicy:
         for candidate in candidates:
             next_hop = candidate.next_hop
 
-            first_hop = self.forecast.find_next_contact(current_node, next_hop, current_time)
+            first_hop = self.forecast.find_next_contact(
+                current_node,
+                next_hop,
+                current_time,
+            )
             if first_hop is None:
                 continue
 
@@ -183,7 +272,12 @@ class CGRLiteRoutingPolicy:
 
         return RoutingDecision(next_hop=best_candidate, reason="selected_future_route")
 
-    def select_next_hop(self, current_node: str, bundle: Bundle, current_time: int) -> Optional[str]:
+    def select_next_hop(
+        self,
+        current_node: str,
+        bundle: Bundle,
+        current_time: int,
+    ) -> Optional[str]:
         return self.evaluate_decision(current_node, bundle, current_time).next_hop
 
 
@@ -191,50 +285,70 @@ class OpportunisticRoutingPolicy:
     """Wave-46: Bounded Opportunistic Hold-vs-Forward Baseline."""
 
     def __init__(
-        self, 
-        candidate_routes: Dict[str, Dict[str, List[RouteCandidate]]], 
+        self,
+        candidate_routes: Dict[str, Dict[str, List[RouteCandidate]]],
         contact_manager: ContactManager,
-        hold_window: int = 20
+        hold_window: int = 20,
     ):
         self.candidate_routes = candidate_routes
         self.contact_manager = contact_manager
         self.hold_window = hold_window
 
-    def _get_candidate_by_name(self, candidates: List[RouteCandidate], name: str) -> Optional[RouteCandidate]:
-        for c in candidates:
-            if c.next_hop == name:
-                return c
+    def _get_candidate_by_name(
+        self,
+        candidates: List[RouteCandidate],
+        name: str,
+    ) -> Optional[RouteCandidate]:
+        for candidate in candidates:
+            if candidate.next_hop == name:
+                return candidate
         return None
 
-    def evaluate_decision(self, current_node: str, bundle: Bundle, current_time: int) -> RoutingDecision:
+    def evaluate_decision(
+        self,
+        current_node: str,
+        bundle: Bundle,
+        current_time: int,
+    ) -> RoutingDecision:
         if current_node == bundle.destination:
             return RoutingDecision(next_hop=None, reason="at_destination")
 
         if bundle.next_hop:
-            if self.contact_manager.is_forwarding_allowed(current_node, bundle.next_hop, current_time):
+            if self.contact_manager.is_forwarding_allowed(
+                current_node,
+                bundle.next_hop,
+                current_time,
+            ):
                 return RoutingDecision(next_hop=bundle.next_hop, reason="explicit_override_open")
             return RoutingDecision(next_hop=None, reason="explicit_override_blocked")
 
-        candidates = self.candidate_routes.get(current_node, {}).get(bundle.destination, [])
+        candidates = self.candidate_routes.get(current_node, {}).get(
+            bundle.destination,
+            [],
+        )
         if not candidates:
             return RoutingDecision(next_hop=None, reason="no_route")
 
-        open_candidates = []
-        future_candidates = []
+        open_candidates: List[RouteCandidate] = []
+        future_candidates: List[RouteCandidate] = []
         window_end = current_time + self.hold_window
 
-        for c in candidates:
-            if self.contact_manager.is_forwarding_allowed(current_node, c.next_hop, current_time):
-                open_candidates.append(c)
+        for candidate in candidates:
+            if self.contact_manager.is_forwarding_allowed(
+                current_node,
+                candidate.next_hop,
+                current_time,
+            ):
+                open_candidates.append(candidate)
             else:
                 opens_soon = False
                 for contact in self.contact_manager.contacts:
-                    if contact.allows(current_node, c.next_hop):
+                    if contact.allows(current_node, candidate.next_hop):
                         if current_time < contact.start_time <= window_end:
                             opens_soon = True
                             break
                 if opens_soon:
-                    future_candidates.append(c)
+                    future_candidates.append(candidate)
 
         best_open_name = RouteScorer.choose_best(open_candidates)
         best_future_name = RouteScorer.choose_best(future_candidates)
@@ -248,7 +362,7 @@ class OpportunisticRoutingPolicy:
         if best_open_name and best_future_name:
             best_open_obj = self._get_candidate_by_name(candidates, best_open_name)
             best_future_obj = self._get_candidate_by_name(candidates, best_future_name)
-            
+
             assert best_open_obj is not None
             assert best_future_obj is not None
 
@@ -257,73 +371,95 @@ class OpportunisticRoutingPolicy:
 
         return RoutingDecision(next_hop=best_open_name, reason="selected_opportunistic_now")
 
-    def select_next_hop(self, current_node: str, bundle: Bundle, current_time: int) -> Optional[str]:
+    def select_next_hop(
+        self,
+        current_node: str,
+        bundle: Bundle,
+        current_time: int,
+    ) -> Optional[str]:
         return self.evaluate_decision(current_node, bundle, current_time).next_hop
 
 
 class MultiPathRoutingPolicy:
     """
     Wave-48: Bounded Multi-Path Candidate Selection Baseline.
-    Evaluates multiple open contacts and selects the top-K candidates deterministically 
-    based on score and lexical order, without engaging in uncontrolled replication.
-    Maintains backward compatibility by falling back to the top-1 choice for existing APIs.
     """
 
     def __init__(
         self,
         candidate_routes: Dict[str, Dict[str, List[RouteCandidate]]],
         contact_manager: ContactManager,
-        max_paths: int = 2
+        max_paths: int = 2,
     ):
         self.candidate_routes = candidate_routes
         self.contact_manager = contact_manager
         self.max_paths = max_paths
 
-    def select_next_hops(self, current_node: str, bundle: Bundle, current_time: int) -> List[str]:
-        """
-        Wave-48 primary API: Selects up to `max_paths` valid and open next hops deterministically.
-        """
+    def select_next_hops(
+        self,
+        current_node: str,
+        bundle: Bundle,
+        current_time: int,
+    ) -> List[str]:
         if current_node == bundle.destination:
             return []
 
-        # Explicit override takes absolute precedence if open
         if bundle.next_hop:
-            if self.contact_manager.is_forwarding_allowed(current_node, bundle.next_hop, current_time):
+            if self.contact_manager.is_forwarding_allowed(
+                current_node,
+                bundle.next_hop,
+                current_time,
+            ):
                 return [bundle.next_hop]
             return []
 
-        candidates = self.candidate_routes.get(current_node, {}).get(bundle.destination, [])
-        
-        # Filter strictly for currently open contacts
+        candidates = self.candidate_routes.get(current_node, {}).get(
+            bundle.destination,
+            [],
+        )
+
         valid_candidates = [
-            c for c in candidates
-            if self.contact_manager.is_forwarding_allowed(current_node, c.next_hop, current_time)
+            candidate
+            for candidate in candidates
+            if self.contact_manager.is_forwarding_allowed(
+                current_node,
+                candidate.next_hop,
+                current_time,
+            )
         ]
 
         if not valid_candidates:
             return []
 
-        # Sort deterministically: highest score first, lexical order tie-break
         sorted_candidates = sorted(
             valid_candidates,
-            key=lambda c: (-c.score, c.next_hop)
+            key=lambda candidate: (-candidate.score, candidate.next_hop),
         )
 
-        return [c.next_hop for c in sorted_candidates[:self.max_paths]]
+        return [candidate.next_hop for candidate in sorted_candidates[: self.max_paths]]
 
-    def evaluate_decision(self, current_node: str, bundle: Bundle, current_time: int) -> RoutingDecision:
-        """
-        Maintains Wave-42 metrics compatibility by reporting the primary (first) decision.
-        """
+    def evaluate_decision(
+        self,
+        current_node: str,
+        bundle: Bundle,
+        current_time: int,
+    ) -> RoutingDecision:
         if current_node == bundle.destination:
             return RoutingDecision(next_hop=None, reason="at_destination")
 
         if bundle.next_hop:
-            if self.contact_manager.is_forwarding_allowed(current_node, bundle.next_hop, current_time):
+            if self.contact_manager.is_forwarding_allowed(
+                current_node,
+                bundle.next_hop,
+                current_time,
+            ):
                 return RoutingDecision(next_hop=bundle.next_hop, reason="explicit_override_open")
             return RoutingDecision(next_hop=None, reason="explicit_override_blocked")
 
-        candidates = self.candidate_routes.get(current_node, {}).get(bundle.destination, [])
+        candidates = self.candidate_routes.get(current_node, {}).get(
+            bundle.destination,
+            [],
+        )
         if not candidates:
             return RoutingDecision(next_hop=None, reason="no_route")
 
@@ -333,32 +469,10 @@ class MultiPathRoutingPolicy:
 
         return RoutingDecision(next_hop=hops[0], reason="selected_multipath_candidate")
 
-    def select_next_hop(self, current_node: str, bundle: Bundle, current_time: int) -> Optional[str]:
-        """
-        Maintains Phase-3 API compatibility by degrading cleanly to the top-1 choice.
-        """
+    def select_next_hop(
+        self,
+        current_node: str,
+        bundle: Bundle,
+        current_time: int,
+    ) -> Optional[str]:
         return self.evaluate_decision(current_node, bundle, current_time).next_hop
-
-# --- Wave-89 Integration ---
-from aether_phase6_runtime.config import ENABLE_PHASE6_RUNTIME
-from aether_phase6_runtime.adapter import Phase6DecisionAdapter
-
-
-class RoutingPolicy:
-
-    def __init__(self) -> None:
-        self._phase6_adapter = Phase6DecisionAdapter()
-
-    def get_candidate_links(self, context, original_candidates):
-        candidates = original_candidates
-        
-        if ENABLE_PHASE6_RUNTIME:
-            try:
-                candidates = self._phase6_adapter.apply_decision(
-                    context,
-                    candidates,
-                )
-            except Exception:
-                candidates = original_candidates
-
-        return candidates
