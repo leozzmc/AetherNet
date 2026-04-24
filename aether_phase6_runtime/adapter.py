@@ -1,4 +1,4 @@
-from typing import List
+from typing import List, Dict
 
 from aether_routing_context import RoutingContext
 from aether_routing_scoring import ProbabilisticScorer
@@ -8,9 +8,7 @@ from aether_security_routing import SecurityAwareRoutingEngine
 
 class Phase6DecisionAdapter:
     """
-    Wave-89: Runtime Bridge for Phase-6.
-
-    Filters candidate links using Phase-6 decision outputs.
+    Wave-90: Runtime Bridge (Optimized + Backward Compatible)
     """
 
     def __init__(self) -> None:
@@ -18,22 +16,10 @@ class Phase6DecisionAdapter:
         self._signal_builder = SecuritySignalBuilder()
         self._decision_engine = SecurityAwareRoutingEngine()
 
-    def filter_candidates(
+    def _compute_decision_map(
         self,
         context: RoutingContext,
-        candidate_link_ids: List[str],
-    ) -> List[str]:
-        """
-        Apply Phase-6 decision to filter candidates.
-
-        Removes links classified as "avoid".
-        Preserves input ordering.
-        """
-
-        if not candidate_link_ids:
-            return []
-
-        # ⚠️ Phase-7 TODO: cache / reuse decision result per context
+    ) -> Dict[str, str]:
         score_report = self._scorer.score(context)
         signal_report = self._signal_builder.build(context, score_report)
         decision = self._decision_engine.build_decision(
@@ -42,18 +28,77 @@ class Phase6DecisionAdapter:
             signal_report,
         )
 
-        # 🔥 FIX: derive avoid set from link_decisions
-        avoid_set = {
-            d.link_id
+        return {
+            d.link_id: d.decision
             for d in decision.link_decisions
-            if d.decision == "avoid"
         }
 
-        # 🔥 IMPORTANT: only filter within current candidate set
-        filtered = [
+    def apply_decision(
+        self,
+        context: RoutingContext,
+        candidate_link_ids: List[str],
+    ) -> List[str]:
+        if not candidate_link_ids:
+            return []
+
+        decision_map = self._compute_decision_map(context)
+
+        preferred = []
+        allowed = []
+
+        for link_id in candidate_link_ids:
+            decision_type = decision_map.get(link_id, "allowed")
+
+            if decision_type == "avoid":
+                continue
+
+            if decision_type == "preferred":
+                preferred.append(link_id)
+            else:
+                allowed.append(link_id)
+
+        return preferred + allowed
+
+    # 🔥 BACKWARD COMPATIBILITY (VERY IMPORTANT)
+
+    def filter_candidates(
+        self,
+        context: RoutingContext,
+        candidate_link_ids: List[str],
+    ) -> List[str]:
+        """
+        Legacy API support (Wave-89 tests)
+        """
+        decision_map = self._compute_decision_map(context)
+
+        return [
             link_id
             for link_id in candidate_link_ids
-            if link_id not in avoid_set
+            if decision_map.get(link_id, "allowed") != "avoid"
         ]
 
-        return filtered
+    def prioritize_candidates(
+        self,
+        context: RoutingContext,
+        candidate_link_ids: List[str],
+    ) -> List[str]:
+        """
+        Legacy API support (Wave-90 tests)
+        """
+        decision_map = self._compute_decision_map(context)
+
+        preferred = []
+        allowed = []
+
+        for link_id in candidate_link_ids:
+            decision_type = decision_map.get(link_id, "allowed")
+
+            if decision_type == "avoid":
+                continue
+
+            if decision_type == "preferred":
+                preferred.append(link_id)
+            else:
+                allowed.append(link_id)
+
+        return preferred + allowed

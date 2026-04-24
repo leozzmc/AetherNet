@@ -7,19 +7,30 @@ import aether_phase6_runtime.config as p6_config
 
 # --- Mocks for Isolation ---
 
-def create_mock_context(candidates: list[str], jammed_links: list[str]) -> RoutingContext:
-    """Creates a basic RoutingContext to trigger deterministic Phase-6 behavior."""
+def create_mock_context(
+    candidates: list[str],
+    jammed_links: list[str] = None,
+    degraded_links: list[str] = None,
+) -> RoutingContext:
+
+    if jammed_links is None:
+        jammed_links = []
+
+    if degraded_links is None:
+        degraded_links = []
+
     obs = NetworkObservation(
         time_index=10,
         node_ids=["N1", "N2", "N3"],
-        link_ids=["L1", "L2", "L3"],
-        degraded_links=[],
+        link_ids=["L1", "L2", "L3", "L4"],
+        degraded_links=degraded_links,
         extra_delay_ms_by_link={},
-        jammed_links=jammed_links,  # Jammed links will be marked 'avoid' by Phase-6
+        jammed_links=jammed_links,
         malicious_drop_links=[],
         compromised_nodes=[],
         injected_delay_ms_by_link={},
     )
+
     return RoutingContext(
         scenario_name="runtime_bridge_test",
         master_seed=42,
@@ -112,3 +123,64 @@ def test_only_filters_within_candidate_scope(adapter):
 
     # 必須只影響 L2
     assert filtered == []
+
+# --- Wave-90 Tests (Priority) ---
+
+def test_prioritize_ordering(adapter: Phase6DecisionAdapter) -> None:
+    """Test 1: Preferred links are hoisted above allowed links."""
+    # L1 is clean (preferred), L2 is degraded (allowed)
+    context = create_mock_context(candidates=["L1", "L2"], degraded_links=["L2"])
+    
+    # Input has L2 before L1
+    prioritized = adapter.prioritize_candidates(context, ["L2", "L1"])
+    
+    # Output must group Preferred (L1) then Allowed (L2)
+    assert prioritized == ["L1", "L2"]
+
+
+def test_stable_ordering(adapter: Phase6DecisionAdapter) -> None:
+    """Test 2: Order is preserved within the same priority group."""
+    # L1 and L3 are both clean (preferred)
+    context = create_mock_context(candidates=["L1", "L3"])
+    
+    prioritized_1 = adapter.prioritize_candidates(context, ["L1", "L3"])
+    prioritized_2 = adapter.prioritize_candidates(context, ["L3", "L1"])
+    
+    assert prioritized_1 == ["L1", "L3"]
+    assert prioritized_2 == ["L3", "L1"]
+
+
+def test_no_preferred(adapter: Phase6DecisionAdapter) -> None:
+    """Test 3: If all candidates are allowed, original order is strictly unchanged."""
+    # Both L1 and L2 are degraded (allowed)
+    context = create_mock_context(candidates=["L1", "L2"], degraded_links=["L1", "L2"])
+    
+    prioritized = adapter.prioritize_candidates(context, ["L2", "L1"])
+    
+    assert prioritized == ["L2", "L1"]
+
+
+def test_prioritize_deterministic(adapter: Phase6DecisionAdapter) -> None:
+    """Test 4: Same input consistently yields the same prioritized output."""
+    context = create_mock_context(candidates=["L1", "L2", "L3"], degraded_links=["L2"])
+    
+    run_1 = adapter.prioritize_candidates(context, ["L3", "L2", "L1"])
+    run_2 = adapter.prioritize_candidates(context, ["L3", "L2", "L1"])
+    
+    # L3, L1 are preferred. L2 is allowed. L3 came before L1 in input.
+    assert run_1 == ["L3", "L1", "L2"]
+    assert run_1 == run_2
+
+def test_apply_decision_combined(adapter: Phase6DecisionAdapter):
+    context = create_mock_context(
+        candidates=["L1", "L2", "L3"],
+        jammed_links=["L2"],
+        degraded_links=["L3"],
+    )
+
+    result = adapter.apply_decision(context, ["L3", "L2", "L1"])
+
+    # L2 removed
+    # L1 preferred
+    # L3 allowed
+    assert result == ["L1", "L3"]
