@@ -2,3 +2,4 @@
 # Kept strictly minimal for the MVP phase.
 
 pytest>=7.0.0
+streamlit
