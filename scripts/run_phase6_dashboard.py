@@ -18,6 +18,10 @@ from aether_phase6_runtime.benchmarks import (
 )
 from aether_phase6_runtime.report import BenchmarkReportBuilder
 from aether_phase6_runtime.insight import RoutingInsightGenerator
+from aether_phase6_runtime.narrative import RoutingNarrativeGenerator
+
+
+MODE_ORDER = ["legacy", "phase6_balanced", "phase6_adaptive"]
 
 
 @st.cache_data
@@ -56,10 +60,19 @@ def render_scenario_viewer(scenarios: list[dict]) -> None:
         scenario for scenario in scenarios if scenario["scenario_id"] == selected_id
     )
 
-    # --- Table (pure data, no logic) ---
+    st.caption(f"Scenario ID: {selected_id}")
+
+    # --- Table (sorted + clean) ---
+    sorted_results = sorted(
+        selected["results"],
+        key=lambda r: MODE_ORDER.index(r["routing_mode"])
+        if r["routing_mode"] in MODE_ORDER else 99,
+    )
+
     rows = []
-    for result in selected["results"]:
+    for result in sorted_results:
         hop = result["selected_next_hop"] or "NONE"
+
         rows.append(
             {
                 "Mode": result["routing_mode"].replace("phase6_", ""),
@@ -68,23 +81,21 @@ def render_scenario_viewer(scenarios: list[dict]) -> None:
             }
         )
 
-    st.subheader(f"Scenario: {selected_id}")
+    st.subheader(f"Routing Decisions")
     st.table(rows)
 
     # --- Insight Layer ---
     st.subheader("🧠 System Insights")
 
-    generator = RoutingInsightGenerator()
-    insight = generator.generate(selected)
+    insight = RoutingInsightGenerator().generate(selected)
 
-    # Observations (neutral)
     for obs in insight.observations:
         st.write(f"• {obs}")
 
     st.write("")
 
-    # Conclusions (semantic rendering)
     for conc in insight.conclusions:
+        # minimal heuristic (acceptable for now)
         lower = conc.lower()
 
         if "vulnerable" in lower or "unsafe" in lower:
@@ -93,6 +104,20 @@ def render_scenario_viewer(scenarios: list[dict]) -> None:
             st.success(conc)
         else:
             st.info(conc)
+
+    # --- Narrative Layer ---
+    st.subheader("📢 Narrative")
+
+    narrative = RoutingNarrativeGenerator().generate(selected, insight)
+
+    st.markdown("**🎤 Interview Explanation**")
+    st.write(narrative.interview)
+
+    st.markdown("**📺 Demo Script**")
+    st.write(narrative.demo)
+
+    st.markdown("**📝 Summary**")
+    st.info(narrative.summary)
 
 
 def main() -> None:
