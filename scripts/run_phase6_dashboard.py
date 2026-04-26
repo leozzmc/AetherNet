@@ -12,11 +12,12 @@ except ImportError:
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from aether_phase6_runtime.benchmarks import (  # noqa: E402
+from aether_phase6_runtime.benchmarks import (
     RuntimeBenchmarkRunner,
     default_runtime_benchmark_scenarios,
 )
-from aether_phase6_runtime.report import BenchmarkReportBuilder  # noqa: E402
+from aether_phase6_runtime.report import BenchmarkReportBuilder
+from aether_phase6_runtime.insight import RoutingInsightGenerator
 
 
 @st.cache_data
@@ -45,22 +46,6 @@ def render_summary(summary: dict) -> None:
     )
 
 
-def _status_for_result(scenario_id: str, hop: str) -> str:
-    if hop == "NONE":
-        return "Blocked / no candidate"
-
-    if scenario_id == "jammed" and hop == "L2":
-        return "Unsafe legacy choice"
-
-    if scenario_id == "jammed" and hop != "L2":
-        return "Threat avoided"
-
-    if scenario_id == "mixed_risk" and hop == "L3":
-        return "Unsafe jammed link"
-
-    return "Selected route"
-
-
 def render_scenario_viewer(scenarios: list[dict]) -> None:
     st.header("Scenario Viewer")
 
@@ -71,6 +56,7 @@ def render_scenario_viewer(scenarios: list[dict]) -> None:
         scenario for scenario in scenarios if scenario["scenario_id"] == selected_id
     )
 
+    # --- Table (pure data, no logic) ---
     rows = []
     for result in selected["results"]:
         hop = result["selected_next_hop"] or "NONE"
@@ -79,24 +65,34 @@ def render_scenario_viewer(scenarios: list[dict]) -> None:
                 "Mode": result["routing_mode"].replace("phase6_", ""),
                 "Selected Next Hop": hop,
                 "Decision Reason": result["decision_reason"],
-                "Status": _status_for_result(selected_id, hop),
             }
         )
 
     st.subheader(f"Scenario: {selected_id}")
     st.table(rows)
 
-    if selected_id == "jammed":
-        st.info(
-            "In the jammed scenario, the benchmark marks L2 as unsafe. "
-            "Legacy routing may still select it because it only sees route score, "
-            "while Phase-6 modes can avoid it."
-        )
-    elif selected_id == "mixed_risk":
-        st.info(
-            "In the mixed-risk scenario, one candidate is degraded and another is jammed. "
-            "The benchmark shows how Phase-6 modes preserve usable options while excluding unsafe links."
-        )
+    # --- Insight Layer ---
+    st.subheader("🧠 System Insights")
+
+    generator = RoutingInsightGenerator()
+    insight = generator.generate(selected)
+
+    # Observations (neutral)
+    for obs in insight.observations:
+        st.write(f"• {obs}")
+
+    st.write("")
+
+    # Conclusions (semantic rendering)
+    for conc in insight.conclusions:
+        lower = conc.lower()
+
+        if "vulnerable" in lower or "unsafe" in lower:
+            st.error(conc)
+        elif "improve" in lower or "preserve" in lower or "robust" in lower:
+            st.success(conc)
+        else:
+            st.info(conc)
 
 
 def main() -> None:
