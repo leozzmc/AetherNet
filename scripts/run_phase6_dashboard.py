@@ -2,26 +2,32 @@
 from pathlib import Path
 import sys
 import time
+from typing import Any, Dict, List
 
-import streamlit as st
+try:
+    import streamlit as st
+except ImportError:
+    print("Streamlit is not installed.")
+    print("Install it with: pip install streamlit")
+    raise SystemExit(1)
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from aether_phase6_runtime.benchmarks import (
+from aether_phase6_runtime.benchmarks import (  # noqa: E402
     RuntimeBenchmarkRunner,
     default_runtime_benchmark_scenarios,
 )
-from aether_phase6_runtime.report import BenchmarkReportBuilder
-from aether_phase6_runtime.insight import RoutingInsightGenerator
-from aether_phase6_runtime.narrative import RoutingNarrativeGenerator
+from aether_phase6_runtime.insight import RoutingInsightGenerator  # noqa: E402
+from aether_phase6_runtime.narrative import RoutingNarrativeGenerator  # noqa: E402
+from aether_phase6_runtime.report import BenchmarkReportBuilder  # noqa: E402
 
 
 MODE_ORDER = ["legacy", "phase6_balanced", "phase6_adaptive"]
 
 
 @st.cache_data
-def run_pipeline():
+def run_pipeline() -> Dict[str, Any]:
     runner = RuntimeBenchmarkRunner()
     scenarios = default_runtime_benchmark_scenarios()
     suite = runner.run_suite("dashboard_demo", scenarios)
@@ -30,205 +36,220 @@ def run_pipeline():
     return report.structured
 
 
-# ----------------------------
-# UI Components
-# ----------------------------
-
-def render_summary(summary):
-    st.title("🛰️ AetherNet Phase-6 Interactive Demo")
-
-    col1, col2, col3 = st.columns(3)
-    col1.metric("Total Decisions", summary["total_decisions"])
-    col2.metric("Filtered-All", summary["filtered_all_count"])
-    col3.metric("Modes Evaluated", len(summary["mode_counts"]))
-
-
-def get_result_map(results):
+def get_result_map(results: List[Dict[str, Any]]) -> Dict[str, str]:
     return {
-        r["routing_mode"]: r["selected_next_hop"]
-        for r in results
+        result["routing_mode"]: result["selected_next_hop"] or "NONE"
+        for result in results
     }
 
 
-# ----------------------------
-# 🔥 Story Mode (Architecture Safe)
-# ----------------------------
+def render_status_message(status: str, text: str) -> None:
+    renderers = {
+        "info": st.info,
+        "success": st.success,
+        "warning": st.warning,
+        "error": st.error,
+    }
+    renderers.get(status, st.info)(text)
 
-def render_story_mode(scenario):
+
+def render_summary(summary: Dict[str, Any]) -> None:
+    with st.container():
+        st.title("🛰️ AetherNet Phase-6 Product Demo")
+        st.markdown(
+            "Deterministic comparison of legacy baseline vs. Phase-6 active security routing modes."
+        )
+
+        col1, col2, col3 = st.columns(3)
+        col1.metric("Total Decisions Executed", summary["total_decisions"])
+        col2.metric("Extreme Lockdowns", summary["filtered_all_count"])
+        col3.metric("Routing Modes", len(summary["mode_counts"]))
+
+        st.divider()
+
+
+def render_story_mode(scenario: Dict[str, Any], insight: Any, narrative: Any) -> None:
     st.subheader("🎬 Story Mode")
 
-    results = scenario["results"]
-    result_map = get_result_map(results)
-
-    legacy = result_map.get("legacy")
-    balanced = result_map.get("phase6_balanced")
-    adaptive = result_map.get("phase6_adaptive")
+    result_map = get_result_map(scenario["results"])
+    legacy = result_map.get("legacy", "NONE")
+    balanced = result_map.get("phase6_balanced", "NONE")
+    adaptive = result_map.get("phase6_adaptive", "NONE")
 
     scenario_id = scenario["scenario_id"]
 
-    # Fetch backend intelligence (Do NOT hardcode logic in UI)
-    insight = RoutingInsightGenerator().generate(scenario)
-    narrative = RoutingNarrativeGenerator().generate(scenario, insight)
+    with st.container():
+        st.markdown("### 🔎 Context")
+        st.info(
+            f"Running deterministic simulation for scenario constraint: "
+            f"**`{scenario_id.upper()}`**"
+        )
 
-    st.write(f"### Scenario Context: `{scenario_id.upper()}`")
+    with st.container():
+        st.markdown("### ⚖️ Decision Difference")
+        col1, col2 = st.columns(2)
 
-    # Step 1
-    st.markdown("#### 🔎 Step 1: Network Condition")
-    st.info(f"Running simulation under **{scenario_id}** environment constraints.")
-
-    # Step 2
-    st.markdown("#### 🔴 Step 2: Legacy Decision")
-    st.write(f"Selected: **{legacy or 'NONE'}**")
-
-    # Step 3
-    st.markdown("#### 🟢 Step 3: Phase-6 Decision")
-    st.write(f"Balanced selected: **{balanced or 'NONE'}**")
-    st.write(f"Adaptive selected: **{adaptive or 'NONE'}**")
-
-    # Step 4
-    st.markdown("#### 🧠 Step 4: What Happened")
-    if legacy != balanced or legacy != adaptive:
-        st.warning(narrative.demo)
-    else:
-        st.success(narrative.demo)
-
-    # Step 5
-    st.markdown("#### 📊 Step 5: System Impact")
-    for conc in insight.conclusions:
-        if "vulnerable" in conc.lower() or "critical" in conc.lower():
-            st.error(conc)
+        if legacy == balanced:
+            with col1:
+                st.info(f"**Legacy Routing Selected:**\n\n### {legacy}")
+            with col2:
+                st.info(f"**Phase-6 Routing Selected:**\n\n### {balanced}")
         else:
-            st.success(conc)
+            with col1:
+                st.error(f"**Legacy Routing Selected:**\n\n### {legacy}")
+            with col2:
+                st.success(f"**Phase-6 Routing Selected:**\n\n### {balanced}")
+
+        if adaptive != balanced:
+            st.caption(f"Adaptive mode selected: `{adaptive}`")
+
+    with st.container():
+        st.markdown("### 🧠 System Behavior")
+        render_status_message(narrative.demo_status, narrative.demo)
+
+    with st.container():
+        st.markdown("### 📊 Impact")
+        for conclusion in insight.conclusions:
+            render_status_message(conclusion.status, conclusion.text)
 
 
-# ----------------------------
-# Table Mode
-# ----------------------------
-
-def render_table_mode(scenario):
-    st.subheader("📊 Table View")
-
-    results = sorted(
-        scenario["results"],
-        key=lambda r: MODE_ORDER.index(r["routing_mode"]) if r["routing_mode"] in MODE_ORDER else 99
-    )
-
-    rows = []
-    for r in results:
-        hop = r["selected_next_hop"] or "NONE"
-        rows.append({
-            "Mode": r["routing_mode"].replace("phase6_", ""),
-            "Next Hop": hop,
-            "Reason": r["decision_reason"],
-        })
-
-    st.table(rows)
-
-
-# ----------------------------
-# Comparison Mode
-# ----------------------------
-
-def render_comparison_mode(scenario):
+def render_comparison_mode(scenario: Dict[str, Any]) -> None:
     st.subheader("⚔️ Direct Comparison")
 
     result_map = get_result_map(scenario["results"])
-
     legacy = result_map.get("legacy", "NONE")
     balanced = result_map.get("phase6_balanced", "NONE")
     adaptive = result_map.get("phase6_adaptive", "NONE")
 
     col1, col2, col3 = st.columns(3)
+    col1.metric("Legacy Baseline", legacy)
+    col2.metric("Phase-6 Balanced", balanced)
+    col3.metric("Phase-6 Adaptive", adaptive)
 
-    col1.markdown(f"**Legacy**\n\n🔴 `{legacy}`")
-    col2.markdown(f"**Balanced**\n\n🟢 `{balanced}`")
-    col3.markdown(f"**Adaptive**\n\n🟢 `{adaptive}`")
-
-    if legacy != balanced:
-        st.warning("⚠️ High Risk: Decision divergence detected. Phase-6 initiated defensive rerouting.")
-    else:
-        st.success("✔ System Consensus: All modes align on optimal path.")
+    st.caption("Routing behavior comparison across modes.")
 
 
-# ----------------------------
-# Insight + Narrative
-# ----------------------------
+def render_table_mode(scenario: Dict[str, Any]) -> None:
+    st.subheader("📊 Raw Data Table")
 
-def render_analysis(scenario):
-    with st.expander("🔬 Deep Dive: System Analytics", expanded=False):
-        insight = RoutingInsightGenerator().generate(scenario)
-        narrative = RoutingNarrativeGenerator().generate(scenario, insight)
+    sorted_results = sorted(
+        scenario["results"],
+        key=lambda result: (
+            MODE_ORDER.index(result["routing_mode"])
+            if result["routing_mode"] in MODE_ORDER
+            else 99
+        ),
+    )
 
-        st.markdown("**Core Observations**")
-        for obs in insight.observations:
-            st.write(f"• {obs}")
+    rows = [
+        {
+            "Mode": result["routing_mode"].replace("phase6_", ""),
+            "Selected Next Hop": result["selected_next_hop"] or "NONE",
+            "Decision Reason": result["decision_reason"],
+        }
+        for result in sorted_results
+    ]
+
+    st.table(rows)
+
+
+def render_play_demo(scenario: Dict[str, Any], narrative: Any) -> None:
+    st.subheader("▶ Live Simulation Reel")
+
+    result_map = get_result_map(scenario["results"])
+    legacy = result_map.get("legacy", "NONE")
+    balanced = result_map.get("phase6_balanced", "NONE")
+
+    if st.button("▶ Run Step-by-Step Simulation"):
+        placeholder = st.empty()
+
+        placeholder.info("Evaluating routing context...")
+        time.sleep(0.6)
+
+        if legacy == balanced:
+            placeholder.info(f"Legacy and Phase-6 both selected: **{legacy}**")
+        else:
+            placeholder.error(f"Legacy selected: **{legacy}**")
+            time.sleep(0.8)
+            placeholder.success(f"Phase-6 selected: **{balanced}**")
+
+        time.sleep(0.8)
+        placeholder.markdown(f"> **Conclusion:** {narrative.summary}")
+
+
+def render_analysis(insight: Any, narrative: Any) -> None:
+    with st.expander("🔬 Deep Dive Analysis", expanded=False):
+        st.markdown("**Core Backend Observations**")
+        for observation in insight.observations:
+            st.write(f"• {observation}")
 
         st.markdown("---")
-        st.markdown("**Interview Pitch**")
-        st.info(narrative.interview)
+        st.markdown("**Core Backend Conclusions**")
+        for conclusion in insight.conclusions:
+            render_status_message(conclusion.status, conclusion.text)
+
+        st.markdown("---")
+        st.markdown("**Technical Context**")
+        render_status_message(narrative.summary_status, narrative.interview)
 
 
-# ----------------------------
-# Play Demo
-# ----------------------------
-
-def render_play_demo(scenario):
-    st.subheader("▶ Play Demo Execution")
-
-    if st.button("Run Simulation Step-by-Step"):
-        placeholder = st.empty()
-        steps = [
-            "Initializing Routing Context...",
-            "Evaluating baseline metrics...",
-            "Applying Phase-6 Threat Signals...",
-            "Computing Divergence...",
-            "Finalizing Next-Hop Selection ✅"
-        ]
-        for step in steps:
-            placeholder.info(step)
-            time.sleep(0.6)
-
-
-# ----------------------------
-# Main
-# ----------------------------
-
-def main():
+def main() -> None:
     st.set_page_config(
-        page_title="AetherNet Phase-6 Demo",
+        page_title="AetherNet Product Demo",
         page_icon="🛰️",
-        layout="centered", # Centered looks better for storytelling
+        layout="centered",
     )
 
     data = run_pipeline()
+
     render_summary(data["summary"])
-    st.divider()
 
     scenarios = data["scenarios"]
-    scenario_ids = [s["scenario_id"] for s in scenarios]
+    scenario_ids = [scenario["scenario_id"] for scenario in scenarios]
 
-    # Use a cleaner horizontal radio for scenario selection
-    selected_id = st.radio("Select Network Scenario:", scenario_ids, horizontal=True)
-    scenario = next(s for s in scenarios if s["scenario_id"] == selected_id)
-    
-    st.divider()
+    with st.container():
+        st.markdown("### 1. Select Network Scenario Constraint")
+        selected_id = st.radio(
+            "Scenario",
+            scenario_ids,
+            horizontal=True,
+            label_visibility="collapsed",
+        )
+        scenario = next(item for item in scenarios if item["scenario_id"] == selected_id)
 
-    view_mode = st.selectbox(
-        "Select Visualization Mode",
-        ["Story Mode", "Comparison Mode", "Data Table"]
-    )
-
-    if view_mode == "Story Mode":
-        render_story_mode(scenario)
-    elif view_mode == "Data Table":
-        render_table_mode(scenario)
-    else:
-        render_comparison_mode(scenario)
+        insight = RoutingInsightGenerator().generate(scenario)
+        narrative = RoutingNarrativeGenerator().generate(scenario, insight)
 
     st.divider()
-    render_analysis(scenario)
+
+    with st.container():
+        st.markdown("### 2. Visualization")
+        view_mode = st.radio(
+            "Select View Mode",
+            ["Story Mode", "Comparison Mode", "Table View"],
+            horizontal=True,
+            label_visibility="collapsed",
+        )
+
+        if view_mode == "Story Mode":
+            render_story_mode(scenario, insight, narrative)
+        elif view_mode == "Comparison Mode":
+            render_comparison_mode(scenario)
+        else:
+            render_table_mode(scenario)
+
     st.divider()
-    render_play_demo(scenario)
+
+    with st.container():
+        st.markdown("### 3. Dynamic Execution")
+        render_play_demo(scenario, narrative)
+
+    st.divider()
+
+    render_analysis(insight, narrative)
+
+    with st.expander("🛠️ Inspect Raw Deterministic Artifact"):
+        st.json(data)
 
 
 if __name__ == "__main__":
