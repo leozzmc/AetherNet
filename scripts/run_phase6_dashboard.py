@@ -21,6 +21,7 @@ from aether_phase6_runtime.benchmarks import (  # noqa: E402
 from aether_phase6_runtime.insight import RoutingInsightGenerator  # noqa: E402
 from aether_phase6_runtime.narrative import RoutingNarrativeGenerator  # noqa: E402
 from aether_phase6_runtime.report import BenchmarkReportBuilder  # noqa: E402
+from aether_phase6_runtime.trace import DecisionTraceBuilder  # noqa: E402
 
 
 MODE_ORDER = ["legacy", "phase6_balanced", "phase6_adaptive"]
@@ -53,6 +54,16 @@ def render_status_message(status: str, text: str) -> None:
     renderers.get(status, st.info)(text)
 
 
+def render_placeholder_status(placeholder: Any, status: str, text: str) -> None:
+    renderers = {
+        "info": placeholder.info,
+        "success": placeholder.success,
+        "warning": placeholder.warning,
+        "error": placeholder.error,
+    }
+    renderers.get(status, placeholder.info)(text)
+
+
 def render_summary(summary: Dict[str, Any]) -> None:
     with st.container():
         st.title("🛰️ AetherNet Phase-6 Product Demo")
@@ -68,7 +79,22 @@ def render_summary(summary: Dict[str, Any]) -> None:
         st.divider()
 
 
-def render_story_mode(scenario: Dict[str, Any], insight: Any, narrative: Any) -> None:
+def render_trace_pipeline(trace: Any) -> None:
+    st.markdown("### 🧪 Routing Pipeline Trace")
+
+    pipeline = " → ".join(step.text for step in trace.steps)
+    st.code(pipeline)
+
+    for step in trace.steps:
+        render_status_message(step.status, step.text)
+
+
+def render_story_mode(
+    scenario: Dict[str, Any],
+    insight: Any,
+    narrative: Any,
+    trace: Any,
+) -> None:
     st.subheader("🎬 Story Mode")
 
     result_map = get_result_map(scenario["results"])
@@ -84,6 +110,11 @@ def render_story_mode(scenario: Dict[str, Any], insight: Any, narrative: Any) ->
             f"Running deterministic simulation for scenario constraint: "
             f"**`{scenario_id.upper()}`**"
         )
+
+    with st.container():
+        render_trace_pipeline(trace)
+
+    st.divider()
 
     with st.container():
         st.markdown("### ⚖️ Decision Difference")
@@ -153,27 +184,18 @@ def render_table_mode(scenario: Dict[str, Any]) -> None:
     st.table(rows)
 
 
-def render_play_demo(scenario: Dict[str, Any], narrative: Any) -> None:
+def render_play_demo(trace: Any, narrative: Any) -> None:
     st.subheader("▶ Live Simulation Reel")
 
-    result_map = get_result_map(scenario["results"])
-    legacy = result_map.get("legacy", "NONE")
-    balanced = result_map.get("phase6_balanced", "NONE")
-
-    if st.button("▶ Run Step-by-Step Simulation"):
+    if st.button("▶ Run Simulation Step-by-Step"):
         placeholder = st.empty()
 
-        placeholder.info("Evaluating routing context...")
-        time.sleep(0.6)
-
-        if legacy == balanced:
-            placeholder.info(f"Legacy and Phase-6 both selected: **{legacy}**")
-        else:
-            placeholder.error(f"Legacy selected: **{legacy}**")
+        for step in trace.steps:
+            render_placeholder_status(placeholder, step.status, step.text)
             time.sleep(0.8)
-            placeholder.success(f"Phase-6 selected: **{balanced}**")
 
-        time.sleep(0.8)
+        placeholder.success("Simulation complete.")
+        time.sleep(0.5)
         placeholder.markdown(f"> **Conclusion:** {narrative.summary}")
 
 
@@ -219,6 +241,7 @@ def main() -> None:
 
         insight = RoutingInsightGenerator().generate(scenario)
         narrative = RoutingNarrativeGenerator().generate(scenario, insight)
+        trace = DecisionTraceBuilder().build(scenario)
 
     st.divider()
 
@@ -232,7 +255,7 @@ def main() -> None:
         )
 
         if view_mode == "Story Mode":
-            render_story_mode(scenario, insight, narrative)
+            render_story_mode(scenario, insight, narrative, trace)
         elif view_mode == "Comparison Mode":
             render_comparison_mode(scenario)
         else:
@@ -242,7 +265,7 @@ def main() -> None:
 
     with st.container():
         st.markdown("### 3. Dynamic Execution")
-        render_play_demo(scenario, narrative)
+        render_play_demo(trace, narrative)
 
     st.divider()
 
