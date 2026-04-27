@@ -43,21 +43,13 @@ def _append_mode_counts(lines: List[str], mode_counts: Dict[str, int]) -> None:
             lines.append(f"- `{_display_mode(mode)}`: {mode_counts[mode]} executions")
 
 
-def _icon_for_conclusion(conclusion: str) -> str:
-    """
-    Lightweight presentation heuristic only.
-
-    This is intentionally not system logic. The underlying system semantics
-    live in the benchmark, insight, and narrative layers.
-    """
-    lower = conclusion.lower()
-
-    if "vulnerable" in lower or "critical" in lower or "unsafe" in lower:
+def _icon_for_status(status: str) -> str:
+    if status == "error":
         return "🚨"
-
-    if "improve" in lower or "preserve" in lower or "robust" in lower:
+    if status == "warning":
+        return "⚠️"
+    if status == "success":
         return "✅"
-
     return "ℹ️"
 
 
@@ -120,7 +112,7 @@ def build_markdown(structured_data: Dict[str, Any]) -> str:
         lines.append("")
         lines.append("**Conclusions:**")
         for conclusion in insight.conclusions:
-            lines.append(f"- {_icon_for_conclusion(conclusion)} {conclusion}")
+            lines.append(f"- {_icon_for_status(conclusion.status)} {conclusion.text}")
 
         lines.append("")
 
