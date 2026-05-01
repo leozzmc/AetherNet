@@ -5,6 +5,7 @@ import { usePresentation } from "@/components/usePresentation"
 import ScenarioSelector from "@/components/ScenarioSelector"
 import DecisionPanel from "@/components/DecisionPanel"
 import MetricsPanel from "@/components/MetricsPanel"
+import FlowView from "@/components/FlowView" // ⭐ 新增引入
 
 export default function Page() {
   const { data, error } = usePresentation()
@@ -15,14 +16,13 @@ export default function Page() {
 
   const scenarios = data.scenarios
 
-  // Use selected scenario, or fallback to the first one available
   const current =
     scenarios.find((s: any) => s.scenario_id === selected) ||
     scenarios[0]
 
   return (
     <div className="min-h-screen bg-white text-gray-900 p-8 font-sans">
-      <div className="max-w-4xl mx-auto space-y-8">
+      <div className="max-w-5xl mx-auto space-y-8">
         
         <header className="border-b border-gray-200 pb-4">
           <h1 className="text-3xl font-extrabold tracking-tight">AetherNet Dashboard</h1>
@@ -37,17 +37,17 @@ export default function Page() {
           />
         </section>
 
+        {/* ⭐ Wave-110: 替換掉原本的 Placeholder，放入真正的動態視覺化畫布 */}
+        <section className="bg-white rounded-xl shadow-sm border border-gray-100 p-2">
+          <h2 className="text-lg font-semibold px-4 pt-2 pb-4 text-gray-800">Routing Decision Pipeline</h2>
+          <FlowView scenario={current} />
+        </section>
+
         <section>
           <DecisionPanel decisions={current.decisions} />
           <MetricsPanel metrics={current.metrics} />
         </section>
         
-        {/* Placeholder for the upcoming Wave-110 */}
-        <section className="mt-8 border-2 border-dashed border-gray-300 rounded-xl p-12 text-center text-gray-400">
-          <p className="font-mono text-sm">React Flow Visualization Area (Pending Wave-110)</p>
-          <p className="text-xs mt-2">Nodes prepared: {current.nodes.length} | Edges prepared: {current.edges.length}</p>
-        </section>
-
       </div>
     </div>
   )
