@@ -5,8 +5,9 @@ import { useState, useEffect } from "react";
 export function useStoryPlayer(steps: any[]) {
   const [index, setIndex] = useState(0);
   const [playing, setPlaying] = useState(false);
+  const [loop, setLoop] = useState(true);
 
-  // When scenario changes, steps change. Reset the player.
+  // 當 Scenario 切換時，重置播放器
   useEffect(() => {
     setIndex(0);
     setPlaying(false);
@@ -17,16 +18,21 @@ export function useStoryPlayer(steps: any[]) {
     if (!steps || steps.length === 0) return;
 
     if (index >= steps.length - 1) {
-      setPlaying(false);
-      return;
+      if (loop) {
+        const timer = setTimeout(() => setIndex(0), 1500);
+        return () => clearTimeout(timer);
+      } else {
+        setPlaying(false);
+        return;
+      }
     }
 
     const timer = setTimeout(() => {
       setIndex((i) => i + 1);
-    }, 1500); // 1.5s per frame for cinematic timing
+    }, 1200); // Cinematic transition timing
 
     return () => clearTimeout(timer);
-  }, [playing, index, steps]);
+  }, [playing, index, steps, loop]);
 
   return {
     step: steps ? steps[index] : null,
@@ -34,6 +40,8 @@ export function useStoryPlayer(steps: any[]) {
     total: steps ? steps.length : 0,
     playing,
     setPlaying,
+    loop,
+    setLoop,
     next: () => {
       if (steps && index < steps.length - 1) setIndex(index + 1);
     },
