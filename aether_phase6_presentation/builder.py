@@ -92,8 +92,8 @@ class ScenarioPresentation:
             "metrics": dict(self.metrics),
             "decisions": {
                 "legacy": self.legacy,
-                "balanced": self.balanced,
-                "adaptive": self.adaptive,
+                "phase6_balanced": self.balanced,
+                "phase6_adaptive": self.adaptive,
             },
             "nodes": [node.to_dict() for node in self.nodes],
             "edges": [edge.to_dict() for edge in self.edges],
@@ -159,9 +159,10 @@ class PresentationBuilder:
         conclusions = [{"text": c.text, "status": c.status} for c in insight.conclusions]
 
         metrics = {
-            "evaluated_modes": len(results),
-            "node_count": len(nodes),
-            "edge_count": len(edges),
+            # align frontend naming
+            "nodes": len(nodes),
+            "edges": len(edges),
+            "modes": len(results),
             "diverged": legacy != balanced,
         }
 

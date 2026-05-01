@@ -23,9 +23,9 @@
         }
       ],
       "decisions": {
-        "adaptive": "L2",
-        "balanced": "L2",
-        "legacy": "L2"
+        "legacy": "L2",
+        "phase6_adaptive": "L2",
+        "phase6_balanced": "L2"
       },
       "edges": [
         {
@@ -63,9 +63,9 @@
       ],
       "metrics": {
         "diverged": false,
-        "edge_count": 4,
-        "evaluated_modes": 3,
-        "node_count": 5
+        "edges": 4,
+        "modes": 3,
+        "nodes": 5
       },
       "nodes": [
         {
@@ -223,9 +223,9 @@
         }
       ],
       "decisions": {
-        "adaptive": "L2",
-        "balanced": "L2",
-        "legacy": "L2"
+        "legacy": "L2",
+        "phase6_adaptive": "L2",
+        "phase6_balanced": "L2"
       },
       "edges": [
         {
@@ -263,9 +263,9 @@
       ],
       "metrics": {
         "diverged": false,
-        "edge_count": 4,
-        "evaluated_modes": 3,
-        "node_count": 5
+        "edges": 4,
+        "modes": 3,
+        "nodes": 5
       },
       "nodes": [
         {
@@ -423,9 +423,9 @@
         }
       ],
       "decisions": {
-        "adaptive": "L3",
-        "balanced": "L3",
-        "legacy": "L2"
+        "legacy": "L2",
+        "phase6_adaptive": "L3",
+        "phase6_balanced": "L3"
       },
       "edges": [
         {
@@ -463,9 +463,9 @@
       ],
       "metrics": {
         "diverged": true,
-        "edge_count": 4,
-        "evaluated_modes": 3,
-        "node_count": 5
+        "edges": 4,
+        "modes": 3,
+        "nodes": 5
       },
       "nodes": [
         {
@@ -623,9 +623,9 @@
         }
       ],
       "decisions": {
-        "adaptive": "L2",
-        "balanced": "L2",
-        "legacy": "L2"
+        "legacy": "L2",
+        "phase6_adaptive": "L2",
+        "phase6_balanced": "L2"
       },
       "edges": [
         {
@@ -663,9 +663,9 @@
       ],
       "metrics": {
         "diverged": false,
-        "edge_count": 4,
-        "evaluated_modes": 3,
-        "node_count": 5
+        "edges": 4,
+        "modes": 3,
+        "nodes": 5
       },
       "nodes": [
         {
