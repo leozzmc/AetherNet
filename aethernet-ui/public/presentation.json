@@ -29,28 +29,36 @@
       },
       "edges": [
         {
-          "id": "step-0-step-1",
-          "source": "step-0",
-          "status": "info",
-          "target": "step-1"
+          "data": {
+            "status": "info"
+          },
+          "id": "clean-edge-0-to-1",
+          "source": "clean-step-0",
+          "target": "clean-step-1"
         },
         {
-          "id": "step-1-step-2",
-          "source": "step-1",
-          "status": "info",
-          "target": "step-2"
+          "data": {
+            "status": "info"
+          },
+          "id": "clean-edge-1-to-2",
+          "source": "clean-step-1",
+          "target": "clean-step-2"
         },
         {
-          "id": "step-2-step-3",
-          "source": "step-2",
-          "status": "info",
-          "target": "step-3"
+          "data": {
+            "status": "info"
+          },
+          "id": "clean-edge-2-to-3",
+          "source": "clean-step-2",
+          "target": "clean-step-3"
         },
         {
-          "id": "step-3-step-4",
-          "source": "step-3",
-          "status": "info",
-          "target": "step-4"
+          "data": {
+            "status": "info"
+          },
+          "id": "clean-edge-3-to-4",
+          "source": "clean-step-3",
+          "target": "clean-step-4"
         }
       ],
       "metrics": {
@@ -62,61 +70,66 @@
       "nodes": [
         {
           "data": {
+            "kind": "input",
             "label": "Scenario artifact loaded: clean.",
             "status": "info"
           },
-          "id": "step-0",
-          "presentation": {
-            "label": "Scenario artifact loaded: clean.",
-            "status": "info"
+          "id": "clean-step-0",
+          "position": {
+            "x": 0,
+            "y": 0
           },
           "type": "input"
         },
         {
           "data": {
+            "kind": "process",
             "label": "Observed next-hop candidates from evaluated modes: L2.",
             "status": "info"
           },
-          "id": "step-1",
-          "presentation": {
-            "label": "Observed next-hop candidates from evaluated modes: L2.",
-            "status": "info"
+          "id": "clean-step-1",
+          "position": {
+            "x": 320,
+            "y": 0
           },
-          "type": "process"
+          "type": "default"
         },
         {
           "data": {
+            "kind": "process",
             "label": "Legacy baseline selected next hop: L2.",
             "status": "info"
           },
-          "id": "step-2",
-          "presentation": {
-            "label": "Legacy baseline selected next hop: L2.",
-            "status": "info"
+          "id": "clean-step-2",
+          "position": {
+            "x": 640,
+            "y": 0
           },
-          "type": "process"
+          "type": "default"
         },
         {
           "data": {
+            "kind": "process",
             "label": "Phase-6 balanced mode agrees with legacy baseline: L2.",
             "status": "info"
           },
-          "id": "step-3",
-          "presentation": {
-            "label": "Phase-6 balanced mode agrees with legacy baseline: L2.",
-            "status": "info"
+          "id": "clean-step-3",
+          "position": {
+            "x": 960,
+            "y": 0
           },
-          "type": "process"
+          "type": "default"
         },
         {
           "data": {
+            "kind": "output",
             "label": "Final Phase-6 balanced next hop: L2.",
             "status": "info"
           },
-          "id": "step-4",
-          "presentation": {
-            "label": "Final Phase-6 balanced next hop: L2.",
-            "status": "info"
+          "id": "clean-step-4",
+          "position": {
+            "x": 1280,
+            "y": 0
           },
           "type": "output"
         }
@@ -129,7 +142,78 @@
         "summary": "No routing divergence.",
         "summary_status": "info",
         "technical_context": "In the clean scenario, all routing modes converge to the same next hop (L2). This indicates that no additional filtering or prioritization is triggered, and the routing decision is driven by baseline scoring."
-      }
+      },
+      "story_script": [
+        {
+          "highlight_edges": [],
+          "highlight_nodes": [
+            "clean-step-0"
+          ],
+          "id": "frame-0",
+          "label": "Initialization",
+          "message": "Establishing telemetry..."
+        },
+        {
+          "highlight_edges": [
+            "clean-edge-0-to-1"
+          ],
+          "highlight_nodes": [
+            "clean-step-0",
+            "clean-step-1"
+          ],
+          "id": "frame-1",
+          "label": "Phase 1: Info",
+          "message": "Observed next-hop candidates from evaluated modes: L2."
+        },
+        {
+          "highlight_edges": [
+            "clean-edge-0-to-1",
+            "clean-edge-1-to-2"
+          ],
+          "highlight_nodes": [
+            "clean-step-0",
+            "clean-step-1",
+            "clean-step-2"
+          ],
+          "id": "frame-2",
+          "label": "Phase 2: Info",
+          "message": "Legacy baseline selected next hop: L2."
+        },
+        {
+          "highlight_edges": [
+            "clean-edge-0-to-1",
+            "clean-edge-1-to-2",
+            "clean-edge-2-to-3"
+          ],
+          "highlight_nodes": [
+            "clean-step-0",
+            "clean-step-1",
+            "clean-step-2",
+            "clean-step-3"
+          ],
+          "id": "frame-3",
+          "label": "Phase 3: Info",
+          "message": "Phase-6 balanced mode agrees with legacy baseline: L2."
+        },
+        {
+          "highlight_edges": [
+            "clean-edge-0-to-1",
+            "clean-edge-1-to-2",
+            "clean-edge-2-to-3",
+            "clean-edge-3-to-4"
+          ],
+          "highlight_nodes": [
+            "clean-step-0",
+            "clean-step-1",
+            "clean-step-2",
+            "clean-step-3",
+            "clean-step-4"
+          ],
+          "id": "frame-4",
+          "label": "Phase 4: Info",
+          "message": "Final Phase-6 balanced next hop: L2."
+        }
+      ]
     },
     {
       "conclusions": [
@@ -145,28 +229,36 @@
       },
       "edges": [
         {
-          "id": "step-0-step-1",
-          "source": "step-0",
-          "status": "info",
-          "target": "step-1"
+          "data": {
+            "status": "info"
+          },
+          "id": "degraded-edge-0-to-1",
+          "source": "degraded-step-0",
+          "target": "degraded-step-1"
         },
         {
-          "id": "step-1-step-2",
-          "source": "step-1",
-          "status": "info",
-          "target": "step-2"
+          "data": {
+            "status": "info"
+          },
+          "id": "degraded-edge-1-to-2",
+          "source": "degraded-step-1",
+          "target": "degraded-step-2"
         },
         {
-          "id": "step-2-step-3",
-          "source": "step-2",
-          "status": "info",
-          "target": "step-3"
+          "data": {
+            "status": "info"
+          },
+          "id": "degraded-edge-2-to-3",
+          "source": "degraded-step-2",
+          "target": "degraded-step-3"
         },
         {
-          "id": "step-3-step-4",
-          "source": "step-3",
-          "status": "info",
-          "target": "step-4"
+          "data": {
+            "status": "info"
+          },
+          "id": "degraded-edge-3-to-4",
+          "source": "degraded-step-3",
+          "target": "degraded-step-4"
         }
       ],
       "metrics": {
@@ -178,61 +270,66 @@
       "nodes": [
         {
           "data": {
+            "kind": "input",
             "label": "Scenario artifact loaded: degraded.",
             "status": "info"
           },
-          "id": "step-0",
-          "presentation": {
-            "label": "Scenario artifact loaded: degraded.",
-            "status": "info"
+          "id": "degraded-step-0",
+          "position": {
+            "x": 0,
+            "y": 0
           },
           "type": "input"
         },
         {
           "data": {
+            "kind": "process",
             "label": "Observed next-hop candidates from evaluated modes: L2.",
             "status": "info"
           },
-          "id": "step-1",
-          "presentation": {
-            "label": "Observed next-hop candidates from evaluated modes: L2.",
-            "status": "info"
+          "id": "degraded-step-1",
+          "position": {
+            "x": 320,
+            "y": 0
           },
-          "type": "process"
+          "type": "default"
         },
         {
           "data": {
+            "kind": "process",
             "label": "Legacy baseline selected next hop: L2.",
             "status": "info"
           },
-          "id": "step-2",
-          "presentation": {
-            "label": "Legacy baseline selected next hop: L2.",
-            "status": "info"
+          "id": "degraded-step-2",
+          "position": {
+            "x": 640,
+            "y": 0
           },
-          "type": "process"
+          "type": "default"
         },
         {
           "data": {
+            "kind": "process",
             "label": "Phase-6 balanced mode agrees with legacy baseline: L2.",
             "status": "info"
           },
-          "id": "step-3",
-          "presentation": {
-            "label": "Phase-6 balanced mode agrees with legacy baseline: L2.",
-            "status": "info"
+          "id": "degraded-step-3",
+          "position": {
+            "x": 960,
+            "y": 0
           },
-          "type": "process"
+          "type": "default"
         },
         {
           "data": {
+            "kind": "output",
             "label": "Final Phase-6 balanced next hop: L2.",
             "status": "info"
           },
-          "id": "step-4",
-          "presentation": {
-            "label": "Final Phase-6 balanced next hop: L2.",
-            "status": "info"
+          "id": "degraded-step-4",
+          "position": {
+            "x": 1280,
+            "y": 0
           },
           "type": "output"
         }
@@ -245,7 +342,78 @@
         "summary": "No routing divergence.",
         "summary_status": "info",
         "technical_context": "In the degraded scenario, all routing modes converge to the same next hop (L2). This indicates that no additional filtering or prioritization is triggered, and the routing decision is driven by baseline scoring."
-      }
+      },
+      "story_script": [
+        {
+          "highlight_edges": [],
+          "highlight_nodes": [
+            "degraded-step-0"
+          ],
+          "id": "frame-0",
+          "label": "Initialization",
+          "message": "Establishing telemetry..."
+        },
+        {
+          "highlight_edges": [
+            "degraded-edge-0-to-1"
+          ],
+          "highlight_nodes": [
+            "degraded-step-0",
+            "degraded-step-1"
+          ],
+          "id": "frame-1",
+          "label": "Phase 1: Info",
+          "message": "Observed next-hop candidates from evaluated modes: L2."
+        },
+        {
+          "highlight_edges": [
+            "degraded-edge-0-to-1",
+            "degraded-edge-1-to-2"
+          ],
+          "highlight_nodes": [
+            "degraded-step-0",
+            "degraded-step-1",
+            "degraded-step-2"
+          ],
+          "id": "frame-2",
+          "label": "Phase 2: Info",
+          "message": "Legacy baseline selected next hop: L2."
+        },
+        {
+          "highlight_edges": [
+            "degraded-edge-0-to-1",
+            "degraded-edge-1-to-2",
+            "degraded-edge-2-to-3"
+          ],
+          "highlight_nodes": [
+            "degraded-step-0",
+            "degraded-step-1",
+            "degraded-step-2",
+            "degraded-step-3"
+          ],
+          "id": "frame-3",
+          "label": "Phase 3: Info",
+          "message": "Phase-6 balanced mode agrees with legacy baseline: L2."
+        },
+        {
+          "highlight_edges": [
+            "degraded-edge-0-to-1",
+            "degraded-edge-1-to-2",
+            "degraded-edge-2-to-3",
+            "degraded-edge-3-to-4"
+          ],
+          "highlight_nodes": [
+            "degraded-step-0",
+            "degraded-step-1",
+            "degraded-step-2",
+            "degraded-step-3",
+            "degraded-step-4"
+          ],
+          "id": "frame-4",
+          "label": "Phase 4: Info",
+          "message": "Final Phase-6 balanced next hop: L2."
+        }
+      ]
     },
     {
       "conclusions": [
@@ -261,28 +429,36 @@
       },
       "edges": [
         {
-          "id": "step-0-step-1",
-          "source": "step-0",
-          "status": "info",
-          "target": "step-1"
+          "data": {
+            "status": "info"
+          },
+          "id": "jammed-edge-0-to-1",
+          "source": "jammed-step-0",
+          "target": "jammed-step-1"
         },
         {
-          "id": "step-1-step-2",
-          "source": "step-1",
-          "status": "info",
-          "target": "step-2"
+          "data": {
+            "status": "info"
+          },
+          "id": "jammed-edge-1-to-2",
+          "source": "jammed-step-1",
+          "target": "jammed-step-2"
         },
         {
-          "id": "step-2-step-3",
-          "source": "step-2",
-          "status": "success",
-          "target": "step-3"
+          "data": {
+            "status": "success"
+          },
+          "id": "jammed-edge-2-to-3",
+          "source": "jammed-step-2",
+          "target": "jammed-step-3"
         },
         {
-          "id": "step-3-step-4",
-          "source": "step-3",
-          "status": "success",
-          "target": "step-4"
+          "data": {
+            "status": "success"
+          },
+          "id": "jammed-edge-3-to-4",
+          "source": "jammed-step-3",
+          "target": "jammed-step-4"
         }
       ],
       "metrics": {
@@ -294,61 +470,66 @@
       "nodes": [
         {
           "data": {
+            "kind": "input",
             "label": "Scenario artifact loaded: jammed.",
             "status": "info"
           },
-          "id": "step-0",
-          "presentation": {
-            "label": "Scenario artifact loaded: jammed.",
-            "status": "info"
+          "id": "jammed-step-0",
+          "position": {
+            "x": 0,
+            "y": 0
           },
           "type": "input"
         },
         {
           "data": {
+            "kind": "process",
             "label": "Observed next-hop candidates from evaluated modes: L2, L3.",
             "status": "info"
           },
-          "id": "step-1",
-          "presentation": {
-            "label": "Observed next-hop candidates from evaluated modes: L2, L3.",
-            "status": "info"
+          "id": "jammed-step-1",
+          "position": {
+            "x": 320,
+            "y": 0
           },
-          "type": "process"
+          "type": "default"
         },
         {
           "data": {
+            "kind": "process",
             "label": "Legacy baseline selected next hop: L2.",
             "status": "info"
           },
-          "id": "step-2",
-          "presentation": {
-            "label": "Legacy baseline selected next hop: L2.",
-            "status": "info"
+          "id": "jammed-step-2",
+          "position": {
+            "x": 640,
+            "y": 0
           },
-          "type": "process"
+          "type": "default"
         },
         {
           "data": {
+            "kind": "process",
             "label": "Phase-6 balanced mode changed the routing decision: L2 -> L3.",
             "status": "success"
           },
-          "id": "step-3",
-          "presentation": {
-            "label": "Phase-6 balanced mode changed the routing decision: L2 -> L3.",
-            "status": "success"
+          "id": "jammed-step-3",
+          "position": {
+            "x": 960,
+            "y": 0
           },
-          "type": "process"
+          "type": "default"
         },
         {
           "data": {
+            "kind": "output",
             "label": "Final Phase-6 balanced next hop: L3.",
             "status": "success"
           },
-          "id": "step-4",
-          "presentation": {
-            "label": "Final Phase-6 balanced next hop: L3.",
-            "status": "success"
+          "id": "jammed-step-4",
+          "position": {
+            "x": 1280,
+            "y": 0
           },
           "type": "output"
         }
@@ -361,7 +542,78 @@
         "summary": "Phase-6 modifies routing decision.",
         "summary_status": "success",
         "technical_context": "In the jammed scenario, legacy routing selects L2, while Phase-6 balanced routing selects L3. This demonstrates that Phase-6 applies additional filtering or prioritization beyond pure score-based selection."
-      }
+      },
+      "story_script": [
+        {
+          "highlight_edges": [],
+          "highlight_nodes": [
+            "jammed-step-0"
+          ],
+          "id": "frame-0",
+          "label": "Initialization",
+          "message": "Establishing telemetry..."
+        },
+        {
+          "highlight_edges": [
+            "jammed-edge-0-to-1"
+          ],
+          "highlight_nodes": [
+            "jammed-step-0",
+            "jammed-step-1"
+          ],
+          "id": "frame-1",
+          "label": "Phase 1: Info",
+          "message": "Observed next-hop candidates from evaluated modes: L2, L3."
+        },
+        {
+          "highlight_edges": [
+            "jammed-edge-0-to-1",
+            "jammed-edge-1-to-2"
+          ],
+          "highlight_nodes": [
+            "jammed-step-0",
+            "jammed-step-1",
+            "jammed-step-2"
+          ],
+          "id": "frame-2",
+          "label": "Phase 2: Info",
+          "message": "Legacy baseline selected next hop: L2."
+        },
+        {
+          "highlight_edges": [
+            "jammed-edge-0-to-1",
+            "jammed-edge-1-to-2",
+            "jammed-edge-2-to-3"
+          ],
+          "highlight_nodes": [
+            "jammed-step-0",
+            "jammed-step-1",
+            "jammed-step-2",
+            "jammed-step-3"
+          ],
+          "id": "frame-3",
+          "label": "Phase 3: Success",
+          "message": "Phase-6 balanced mode changed the routing decision: L2 -> L3."
+        },
+        {
+          "highlight_edges": [
+            "jammed-edge-0-to-1",
+            "jammed-edge-1-to-2",
+            "jammed-edge-2-to-3",
+            "jammed-edge-3-to-4"
+          ],
+          "highlight_nodes": [
+            "jammed-step-0",
+            "jammed-step-1",
+            "jammed-step-2",
+            "jammed-step-3",
+            "jammed-step-4"
+          ],
+          "id": "frame-4",
+          "label": "Phase 4: Success",
+          "message": "Final Phase-6 balanced next hop: L3."
+        }
+      ]
     },
     {
       "conclusions": [
@@ -377,28 +629,36 @@
       },
       "edges": [
         {
-          "id": "step-0-step-1",
-          "source": "step-0",
-          "status": "info",
-          "target": "step-1"
+          "data": {
+            "status": "info"
+          },
+          "id": "mixed-risk-edge-0-to-1",
+          "source": "mixed-risk-step-0",
+          "target": "mixed-risk-step-1"
         },
         {
-          "id": "step-1-step-2",
-          "source": "step-1",
-          "status": "info",
-          "target": "step-2"
+          "data": {
+            "status": "info"
+          },
+          "id": "mixed-risk-edge-1-to-2",
+          "source": "mixed-risk-step-1",
+          "target": "mixed-risk-step-2"
         },
         {
-          "id": "step-2-step-3",
-          "source": "step-2",
-          "status": "info",
-          "target": "step-3"
+          "data": {
+            "status": "info"
+          },
+          "id": "mixed-risk-edge-2-to-3",
+          "source": "mixed-risk-step-2",
+          "target": "mixed-risk-step-3"
         },
         {
-          "id": "step-3-step-4",
-          "source": "step-3",
-          "status": "info",
-          "target": "step-4"
+          "data": {
+            "status": "info"
+          },
+          "id": "mixed-risk-edge-3-to-4",
+          "source": "mixed-risk-step-3",
+          "target": "mixed-risk-step-4"
         }
       ],
       "metrics": {
@@ -410,61 +670,66 @@
       "nodes": [
         {
           "data": {
+            "kind": "input",
             "label": "Scenario artifact loaded: mixed_risk.",
             "status": "info"
           },
-          "id": "step-0",
-          "presentation": {
-            "label": "Scenario artifact loaded: mixed_risk.",
-            "status": "info"
+          "id": "mixed-risk-step-0",
+          "position": {
+            "x": 0,
+            "y": 0
           },
           "type": "input"
         },
         {
           "data": {
+            "kind": "process",
             "label": "Observed next-hop candidates from evaluated modes: L2.",
             "status": "info"
           },
-          "id": "step-1",
-          "presentation": {
-            "label": "Observed next-hop candidates from evaluated modes: L2.",
-            "status": "info"
+          "id": "mixed-risk-step-1",
+          "position": {
+            "x": 320,
+            "y": 0
           },
-          "type": "process"
+          "type": "default"
         },
         {
           "data": {
+            "kind": "process",
             "label": "Legacy baseline selected next hop: L2.",
             "status": "info"
           },
-          "id": "step-2",
-          "presentation": {
-            "label": "Legacy baseline selected next hop: L2.",
-            "status": "info"
+          "id": "mixed-risk-step-2",
+          "position": {
+            "x": 640,
+            "y": 0
           },
-          "type": "process"
+          "type": "default"
         },
         {
           "data": {
+            "kind": "process",
             "label": "Phase-6 balanced mode agrees with legacy baseline: L2.",
             "status": "info"
           },
-          "id": "step-3",
-          "presentation": {
-            "label": "Phase-6 balanced mode agrees with legacy baseline: L2.",
-            "status": "info"
+          "id": "mixed-risk-step-3",
+          "position": {
+            "x": 960,
+            "y": 0
           },
-          "type": "process"
+          "type": "default"
         },
         {
           "data": {
+            "kind": "output",
             "label": "Final Phase-6 balanced next hop: L2.",
             "status": "info"
           },
-          "id": "step-4",
-          "presentation": {
-            "label": "Final Phase-6 balanced next hop: L2.",
-            "status": "info"
+          "id": "mixed-risk-step-4",
+          "position": {
+            "x": 1280,
+            "y": 0
           },
           "type": "output"
         }
@@ -477,9 +742,80 @@
         "summary": "No routing divergence.",
         "summary_status": "info",
         "technical_context": "In the mixed_risk scenario, all routing modes converge to the same next hop (L2). This indicates that no additional filtering or prioritization is triggered, and the routing decision is driven by baseline scoring."
-      }
+      },
+      "story_script": [
+        {
+          "highlight_edges": [],
+          "highlight_nodes": [
+            "mixed-risk-step-0"
+          ],
+          "id": "frame-0",
+          "label": "Initialization",
+          "message": "Establishing telemetry..."
+        },
+        {
+          "highlight_edges": [
+            "mixed-risk-edge-0-to-1"
+          ],
+          "highlight_nodes": [
+            "mixed-risk-step-0",
+            "mixed-risk-step-1"
+          ],
+          "id": "frame-1",
+          "label": "Phase 1: Info",
+          "message": "Observed next-hop candidates from evaluated modes: L2."
+        },
+        {
+          "highlight_edges": [
+            "mixed-risk-edge-0-to-1",
+            "mixed-risk-edge-1-to-2"
+          ],
+          "highlight_nodes": [
+            "mixed-risk-step-0",
+            "mixed-risk-step-1",
+            "mixed-risk-step-2"
+          ],
+          "id": "frame-2",
+          "label": "Phase 2: Info",
+          "message": "Legacy baseline selected next hop: L2."
+        },
+        {
+          "highlight_edges": [
+            "mixed-risk-edge-0-to-1",
+            "mixed-risk-edge-1-to-2",
+            "mixed-risk-edge-2-to-3"
+          ],
+          "highlight_nodes": [
+            "mixed-risk-step-0",
+            "mixed-risk-step-1",
+            "mixed-risk-step-2",
+            "mixed-risk-step-3"
+          ],
+          "id": "frame-3",
+          "label": "Phase 3: Info",
+          "message": "Phase-6 balanced mode agrees with legacy baseline: L2."
+        },
+        {
+          "highlight_edges": [
+            "mixed-risk-edge-0-to-1",
+            "mixed-risk-edge-1-to-2",
+            "mixed-risk-edge-2-to-3",
+            "mixed-risk-edge-3-to-4"
+          ],
+          "highlight_nodes": [
+            "mixed-risk-step-0",
+            "mixed-risk-step-1",
+            "mixed-risk-step-2",
+            "mixed-risk-step-3",
+            "mixed-risk-step-4"
+          ],
+          "id": "frame-4",
+          "label": "Phase 4: Info",
+          "message": "Final Phase-6 balanced next hop: L2."
+        }
+      ]
     }
   ],
   "type": "presentation_bundle",
-  "version": "1.0"
+  "version": "1.1"
 }

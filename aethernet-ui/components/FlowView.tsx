@@ -1,32 +1,33 @@
 "use client";
 
 import { useMemo } from "react";
-import { ReactFlow, Background, Controls, MiniMap } from "@xyflow/react";
+import { ReactFlow, Background } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 
 import { mapToFlow } from "./flowMapper";
 
 interface FlowViewProps {
   scenario: any;
+  activeStep?: any;
 }
 
-export default function FlowView({ scenario }: FlowViewProps) {
-  // 使用 useMemo 確保在切換 scenario 時才重新計算，優化 React Flow 效能
-  const { nodes, edges } = useMemo(() => mapToFlow(scenario), [scenario]);
+export default function FlowView({ scenario, activeStep }: FlowViewProps) {
+  const stepId = activeStep?.id;
+
+  const { nodes, edges } = useMemo(() => {
+    return mapToFlow(scenario, activeStep);
+  }, [scenario, stepId]); // ⭐ 只用 stepId
 
   return (
-    <div className="h-[400px] w-full border border-gray-200 rounded-xl shadow-inner bg-slate-50 overflow-hidden relative">
-      <ReactFlow 
-        nodes={nodes} 
-        edges={edges} 
-        fitView 
-        fitViewOptions={{ padding: 0.2 }}
-        minZoom={0.5}
-        maxZoom={1.5}
+    <div className="h-[450px] w-full bg-slate-950 rounded-lg overflow-hidden border border-slate-800">
+      <ReactFlow
+        nodes={nodes}
+        edges={edges}
+        fitView
+        fitViewOptions={{ padding: 0.2, maxZoom: 1 }}
+        proOptions={{ hideAttribution: true }}
       >
-        <Background color="#cbd5e1" gap={16} />
-        <Controls />
-        <MiniMap nodeStrokeWidth={3} zoomable pannable />
+        <Background color="#334155" gap={20} size={2} />
       </ReactFlow>
     </div>
   );
