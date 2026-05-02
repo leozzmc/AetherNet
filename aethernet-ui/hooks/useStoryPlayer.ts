@@ -2,16 +2,22 @@
 
 import { useState, useEffect } from "react";
 
-export function useStoryPlayer(steps: any[]) {
+export function useStoryPlayer(steps: any[], isPresentation: boolean) {
   const [index, setIndex] = useState(0);
   const [playing, setPlaying] = useState(false);
   const [loop, setLoop] = useState(true);
 
-  // 當 Scenario 切換時，重置播放器
+  // Kiosk Mode: Auto start
+  useEffect(() => {
+    if (isPresentation) {
+      setPlaying(true);
+    }
+  }, [isPresentation]);
+
   useEffect(() => {
     setIndex(0);
-    setPlaying(false);
-  }, [steps]);
+    if (!isPresentation) setPlaying(false);
+  }, [steps, isPresentation]);
 
   useEffect(() => {
     if (!playing) return;
@@ -19,7 +25,7 @@ export function useStoryPlayer(steps: any[]) {
 
     if (index >= steps.length - 1) {
       if (loop) {
-        const timer = setTimeout(() => setIndex(0), 1500);
+        const timer = setTimeout(() => setIndex(0), 2000); // Wait longer at the end before looping
         return () => clearTimeout(timer);
       } else {
         setPlaying(false);
@@ -29,7 +35,7 @@ export function useStoryPlayer(steps: any[]) {
 
     const timer = setTimeout(() => {
       setIndex((i) => i + 1);
-    }, 1200); // Cinematic transition timing
+    }, 1500); // Cinematic timing
 
     return () => clearTimeout(timer);
   }, [playing, index, steps, loop]);
@@ -47,7 +53,7 @@ export function useStoryPlayer(steps: any[]) {
     },
     reset: () => {
       setIndex(0);
-      setPlaying(false);
+      setPlaying(isPresentation);
     },
   };
 }
